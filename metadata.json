@@ -1,0 +1,8 @@
+{
+  "name": "TAGAD System",
+  "description": "Talibon Analytics for Gender and Development - A comprehensive LGU system for GAD planning, beneficiary tracking, and analytics for the Municipality of Talibon.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

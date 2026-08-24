@@ -1,0 +1,290 @@
+import React, { useState, useEffect } from 'react';
+import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Badge } from '../components/ui/badge';
+import { cn } from '../lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { toast } from 'sonner';
+import { Plus, Edit, Trash2, CheckCircle, Send, Loader2 } from 'lucide-react';
+import { Card, CardContent } from '../components/ui/card';
+
+const GADPlan: React.FC = () => {
+  const { user } = useAuth();
+  const [plans, setPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  const [formData, setFormData] = useState({
+    year: new Date().getFullYear().toString(),
+    office: '',
+    genderIssue: '',
+    causeOfIssue: '',
+    gadResult: '',
+    activity: '',
+    performanceIndicator: '',
+    targetGroup: '',
+    timeline: '',
+    responsibleOffice: '',
+    budget: '',
+    fundSource: 'GAD Budget'
+  });
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/gad-plans?year=${year}`);
+      setPlans(data);
+    } catch (error) {
+      toast.error('Failed to fetch GAD plans');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [year]);
+
+  const handleOpenAdd = () => {
+    setEditingId(null);
+    setFormData({
+      year: year.toString(),
+      office: user?.office || '',
+      genderIssue: '',
+      causeOfIssue: '',
+      gadResult: '',
+      activity: '',
+      performanceIndicator: '',
+      targetGroup: '',
+      timeline: '',
+      responsibleOffice: user?.office || '',
+      budget: '',
+      fundSource: 'GAD Budget'
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleEdit = (p: any) => {
+    setEditingId(p.id);
+    setFormData({
+      year: p.year.toString(),
+      office: p.office,
+      genderIssue: p.genderIssue,
+      causeOfIssue: p.causeOfIssue,
+      gadResult: p.gadResult,
+      activity: p.activity,
+      performanceIndicator: p.performanceIndicator,
+      targetGroup: p.targetGroup,
+      timeline: p.timeline,
+      responsibleOffice: p.responsibleOffice,
+      budget: p.budget.toString(),
+      fundSource: p.fundSource
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleStatusUpdate = async (id: number, status: string) => {
+    try {
+      await api.patch(`/gad-plans/${id}/status`, { status });
+      toast.success(`Plan ${status.toLowerCase()} successfully`);
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to update status');
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this plan entry?')) return;
+    try {
+      await api.delete(`/gad-plans/${id}`);
+      toast.success('Deleted');
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to delete');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const payload = { ...formData, year: parseInt(formData.year), budget: parseFloat(formData.budget) };
+      if (editingId) {
+        await api.put(`/gad-plans/${editingId}`, payload);
+        toast.success('Updated');
+      } else {
+        await api.post('/gad-plans', payload);
+        toast.success('Added');
+      }
+      setIsModalOpen(false);
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to save');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-[#111827]">GAD Plan & Budget (GPB)</h1>
+          <p className="text-sm font-medium text-[#6B7280]">Formulate and manage annual GAD plans</p>
+        </div>
+        <div className="flex gap-3 items-center">
+          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-[#E5E7EB] shadow-sm">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF]">Fiscal Year</span>
+            <select 
+              className="bg-transparent border-none focus:ring-0 text-sm font-bold text-[#6366F1] cursor-pointer outline-none"
+              value={year}
+              onChange={(e) => setYear(parseInt(e.target.value))}
+            >
+              {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          {user?.role !== 'VIEWER' && (
+            <Button onClick={handleOpenAdd} className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg shadow-sm font-semibold">
+              <Plus className="h-4 w-4 mr-2" /> Add Entry
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Card className="border-[#E5E7EB] shadow-sm bg-white rounded-xl overflow-hidden">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-gray-50/50">
+              <TableRow className="border-none">
+                <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 pl-6 text-[#6B7280] w-72">Gender Issue / Activity</TableHead>
+                <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 text-[#6B7280]">Office</TableHead>
+                <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 text-[#6B7280]">Budget</TableHead>
+                <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 text-[#6B7280]">Fund Source</TableHead>
+                <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 text-[#6B7280]">Status</TableHead>
+                <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 pr-6 text-[#6B7280] text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-24"><Loader2 className="h-10 w-10 animate-spin mx-auto text-[#6366F1]" /></TableCell></TableRow>
+              ) : plans.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-24 text-[#9CA3AF] italic text-sm">No plans found for this year</TableCell></TableRow>
+              ) : plans.map((p) => (
+                <TableRow key={p.id} className="hover:bg-indigo-50/20 border-b border-gray-50 last:border-0 transition-colors group">
+                  <TableCell className="py-4 pl-6">
+                    <div className="font-bold text-[#111827] text-sm leading-tight">{p.genderIssue}</div>
+                    <div className="text-[11px] text-[#6366F1] font-bold mt-1.5 uppercase tracking-wide">{p.activity}</div>
+                  </TableCell>
+                  <TableCell className="text-[#374151] py-4">{p.office}</TableCell>
+                  <TableCell className="font-bold text-[#111827] whitespace-nowrap py-4">₱{p.budget.toLocaleString()}</TableCell>
+                  <TableCell className="text-[#6B7280] text-xs font-medium py-4">{p.fundSource}</TableCell>
+                  <TableCell className="py-4">
+                    <span className={cn(
+                      "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest",
+                      p.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600' : 
+                      p.status === 'SUBMITTED' ? 'bg-[#EEF2FF] text-[#6366F1]' : 'bg-gray-100 text-[#6B7280]'
+                    )}>
+                      {p.status}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right py-4 pr-6">
+                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {p.status === 'DRAFT' && user?.role !== 'VIEWER' && (
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(p)} className="h-8 w-8 text-[#6366F1] hover:bg-white hover:shadow-sm"><Edit className="h-4 w-4" /></Button>
+                      )}
+                      {p.status === 'DRAFT' && user?.role !== 'VIEWER' && (
+                        <Button variant="ghost" size="icon" onClick={() => handleStatusUpdate(p.id, 'SUBMITTED')} className="h-8 w-8 text-[#6366F1] hover:bg-white hover:shadow-sm"><Send className="h-4 w-4" /></Button>
+                      )}
+                      {p.status === 'SUBMITTED' && user?.role === 'ADMIN' && (
+                        <Button variant="ghost" size="icon" onClick={() => handleStatusUpdate(p.id, 'APPROVED')} className="h-8 w-8 text-emerald-600 hover:bg-white hover:shadow-sm"><CheckCircle className="h-4 w-4" /></Button>
+                      )}
+                      {p.status === 'SUBMITTED' && user?.role === 'ADMIN' && (
+                        <Button variant="ghost" size="icon" onClick={() => handleStatusUpdate(p.id, 'DRAFT')} className="h-8 w-8 text-orange-500 hover:bg-white hover:shadow-sm"><Trash2 className="h-4 w-4 rotate-180" /></Button>
+                      )}
+                      {user?.role === 'ADMIN' && (
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(p.id)} className="h-8 w-8 text-red-400 hover:bg-white hover:shadow-sm"><Trash2 className="h-4 w-4" /></Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl p-8 border-none shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-[#111827]">{editingId ? 'Edit GAD Plan Entry' : 'New GAD Plan Entry'}</DialogTitle>
+            <p className="text-sm text-[#6B7280]">Formulate the mandates and activities for the GAD budget cycle.</p>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-8 pt-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-[#374151]">Budget Year <span className="text-red-500">*</span></Label>
+                  <Input type="number" className="rounded-lg border-[#D1D5DB] py-6" value={formData.year} onChange={e => setFormData({...formData, year: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-[#374151]">Gender Issue / GAD Mandate <span className="text-red-500">*</span></Label>
+                  <Input className="rounded-lg border-[#D1D5DB] py-6" value={formData.genderIssue} onChange={e => setFormData({...formData, genderIssue: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-[#374151]">Cause of Issue <span className="text-red-500">*</span></Label>
+                  <Input className="rounded-lg border-[#D1D5DB] py-6" value={formData.causeOfIssue} onChange={e => setFormData({...formData, causeOfIssue: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-[#374151]">GAD Result / Outcome Statement <span className="text-red-500">*</span></Label>
+                  <Input className="rounded-lg border-[#D1D5DB] py-6" value={formData.gadResult} onChange={e => setFormData({...formData, gadResult: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-[#374151]">GAD Activity / Program / Project <span className="text-red-500">*</span></Label>
+                  <Input className="rounded-lg border-[#D1D5DB] py-6" value={formData.activity} onChange={e => setFormData({...formData, activity: e.target.value})} required />
+                </div>
+              </div>
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-[#374151]">Performance Indicator <span className="text-red-500">*</span></Label>
+                  <Input className="rounded-lg border-[#D1D5DB] py-6" value={formData.performanceIndicator} onChange={e => setFormData({...formData, performanceIndicator: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-[#374151]">Target Group <span className="text-red-500">*</span></Label>
+                  <Input className="rounded-lg border-[#D1D5DB] py-6" value={formData.targetGroup} onChange={e => setFormData({...formData, targetGroup: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-[#374151]">Timeline <span className="text-red-500">*</span></Label>
+                  <Input placeholder="e.g. Q1 2025" className="rounded-lg border-[#D1D5DB] py-6" value={formData.timeline} onChange={e => setFormData({...formData, timeline: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-[#374151]">Estimated Budget (₱) <span className="text-red-500">*</span></Label>
+                  <Input type="number" step="0.01" className="rounded-lg border-[#D1D5DB] py-6 font-bold text-[#6366F1]" value={formData.budget} onChange={e => setFormData({...formData, budget: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-[#374151]">Fund Source <span className="text-red-500">*</span></Label>
+                  <Input className="rounded-lg border-[#D1D5DB] py-6" value={formData.fundSource} onChange={e => setFormData({...formData, fundSource: e.target.value})} required />
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="pt-8 gap-3">
+              <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} className="rounded-lg text-[#6B7280] font-semibold">Cancel</Button>
+              <Button type="submit" className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg shadow-sm font-bold min-w-[160px]" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : 'Save Plan Entry'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default GADPlan;

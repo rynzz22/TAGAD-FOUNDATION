@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("ENCODER") // SQLite doesn't support enums directly in the same way, but Prisma handles it. Or I use String.
+  office    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Beneficiary {
+  id          Int      @id @default(autoincrement())
+  firstName   String
+  lastName    String
+  sex         String
+  age         Int
+  barangay    String
+  sector      String
+  program     String
+  office      String
+  dateEncoded DateTime @default(now())
+  encodedBy   Int
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Program {
+  id            Int      @id @default(autoincrement())
+  title         String
+  description   String?
+  office        String
+  sector        String
+  budget        Float
+  year          Int
+  status        String   @default("Active")
+  targetMale    Int      @default(0)
+  targetFemale  Int      @default(0)
+  actualMale    Int      @default(0)
+  actualFemale  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model GADPlan {
+  id               Int               @id @default(autoincrement())
+  year             Int
+  office           String
+  genderIssue      String
+  causeOfIssue     String
+  gadResult        String
+  activity         String
+  performanceIndicator String
+  targetGroup      String
+  timeline         String
+  responsibleOffice String
+  budget           Float
+  fundSource       String            @default("GAD Budget")
+  status           String            @default("DRAFT")
+  accomplishments  GADAccomplishment[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model GADAccomplishment {
+  id              Int      @id @default(autoincrement())
+  gadPlanId       Int
+  gadPlan         GADPlan  @relation(fields: [gadPlanId], references: [id], onDelete: Cascade)
+  actualOutput    String
+  actualBeneficiaryMale   Int @default(0)
+  actualBeneficiaryFemale Int @default(0)
+  actualBudgetUsed Float   @default(0)
+  remarks         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
