@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../modules/auth/AuthContext';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '../components/ui/table';
@@ -14,16 +14,16 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
 import { UserPlus, UserCog, ShieldCheck, Loader2 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
 import { cn } from '../lib/utils';
 
 const UserManagement: React.FC = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isAdmin } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -37,10 +37,12 @@ const UserManagement: React.FC = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/users');
-      setUsers(data);
+      const response = await api.get('/users');
+      const payload = response.data?.data ?? response.data;
+      setUsers(Array.isArray(payload) ? payload : []);
     } catch (error) {
       toast.error('Failed to fetch users');
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -66,12 +68,12 @@ const UserManagement: React.FC = () => {
   const handleEdit = (u: any) => {
     setEditingId(u.id);
     setFormData({
-      name: u.name,
-      email: u.email,
+      name: u.name || u.email?.split('@')[0] || '',
+      email: u.email || '',
       password: '', // Don't show password
-      role: u.role,
-      office: u.office,
-      isActive: u.isActive
+      role: u.role || 'ENCODER',
+      office: u.office || u.office?.name || u.office?.code || '',
+      isActive: u.isActive !== undefined ? Boolean(u.isActive) : true
     });
     setIsModalOpen(true);
   };
@@ -93,18 +95,10 @@ const UserManagement: React.FC = () => {
       setIsModalOpen(false);
       fetchUsers();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || error.message || 'Operation failed');
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || error.message || 'Operation failed';
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const getRoleBadge = (role: string) => {
-    switch (role) {
-      case 'ADMIN': return <Badge className="bg-red-600">Admin</Badge>;
-      case 'ENCODER': return <Badge className="bg-blue-600">Encoder</Badge>;
-      case 'VIEWER': return <Badge className="bg-slate-500">Viewer</Badge>;
-      default: return <Badge variant="outline">{role}</Badge>;
     }
   };
 
@@ -115,9 +109,11 @@ const UserManagement: React.FC = () => {
           <h1 className="text-3xl font-bold tracking-tight text-[#111827]">User Management</h1>
           <p className="text-sm font-medium text-[#6B7280]">Manage system access and roles</p>
         </div>
-        <Button onClick={handleOpenAdd} className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg shadow-sm font-semibold px-6">
-          <UserPlus className="h-4 w-4 mr-2" /> Add User
-        </Button>
+        {isAdmin && (
+          <Button onClick={handleOpenAdd} className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg shadow-sm font-semibold px-6">
+            <UserPlus className="h-4 w-4 mr-2" /> Add User
+          </Button>
+        )}
       </div>
 
       <Card className="border-[#E5E7EB] shadow-sm bg-white rounded-xl overflow-hidden">
@@ -142,39 +138,54 @@ const UserManagement: React.FC = () => {
                   <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 text-[#6B7280]">Role</TableHead>
                   <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 text-[#6B7280]">Office</TableHead>
                   <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 text-[#6B7280]">Status</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 pr-8 text-[#6B7280] text-right">Actions</TableHead>
+                  {isAdmin && <TableHead className="text-[10px] font-bold uppercase tracking-wider py-4 pr-8 text-[#6B7280] text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((u) => (
-                  <TableRow key={u.id} className="hover:bg-gray-50/50 border-b border-gray-50 last:border-0 transition-colors group">
-                    <TableCell className="font-bold text-[#111827] text-sm py-5 pl-8">{u.name}</TableCell>
-                    <TableCell className="text-[#374151] text-sm py-5">{u.email}</TableCell>
-                    <TableCell className="py-5">
-                      {u.role === 'ADMIN' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-50 text-red-500 uppercase tracking-widest">Admin</span>
-                      ) : u.role === 'ENCODER' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-[#EEF2FF] text-[#6366F1] uppercase tracking-widest">Encoder</span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-gray-100 text-[#6B7280] uppercase tracking-widest">Viewer</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-[#6B7280] text-sm py-5">{u.office}</TableCell>
-                    <TableCell className="py-5">
-                      <span className={cn(
-                        "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest",
-                        u.isActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-[#9CA3AF]"
-                      )}>
-                        {u.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right py-5 pr-8">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(u)} className="h-9 w-9 text-[#6366F1] hover:bg-white hover:shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
-                        <UserCog className="h-4 w-4" />
-                      </Button>
+                {users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-20 text-[#9CA3AF] italic text-sm">
+                      No users found.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  users.map((u) => {
+                    const roleUpper = (u.role || '').toUpperCase();
+                    const officeName = u.office || u.office?.name || u.office?.code || '-';
+                    const isActive = u.isActive !== undefined ? Boolean(u.isActive) : true;
+                    return (
+                      <TableRow key={u.id} className="hover:bg-gray-50/50 border-b border-gray-50 last:border-0 transition-colors group">
+                        <TableCell className="font-bold text-[#111827] text-sm py-5 pl-8">{u.name || u.email?.split('@')[0]}</TableCell>
+                        <TableCell className="text-[#374151] text-sm py-5">{u.email}</TableCell>
+                        <TableCell className="py-5">
+                          {roleUpper === 'ADMIN' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-50 text-red-500 uppercase tracking-widest">Admin</span>
+                          ) : roleUpper === 'ENCODER' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-[#EEF2FF] text-[#6366F1] uppercase tracking-widest">Encoder</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-gray-100 text-[#6B7280] uppercase tracking-widest">{roleUpper || 'Viewer'}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-[#6B7280] text-sm py-5">{officeName}</TableCell>
+                        <TableCell className="py-5">
+                          <span className={cn(
+                            "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest",
+                            isActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-[#9CA3AF]"
+                          )}>
+                            {isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </TableCell>
+                        {isAdmin && (
+                          <TableCell className="text-right py-5 pr-8">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(u)} className="h-9 w-9 text-[#6366F1] hover:bg-white hover:shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                              <UserCog className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           )}

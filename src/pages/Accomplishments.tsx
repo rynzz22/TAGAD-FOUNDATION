@@ -1,27 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../modules/auth/AuthContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Edit, Trash2, Loader2, Award } from 'lucide-react';
+import { Plus, Edit, Trash2, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
-import { Progress } from '../components/ui/progress';
 import { cn } from '../lib/utils';
 
 const Accomplishments: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isAdmin, hasRole } = useAuth();
   const [accs, setAccs] = useState<any[]>([]);
   const [gadPlans, setGadPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     gadPlanId: '',
@@ -39,10 +37,14 @@ const Accomplishments: React.FC = () => {
         api.get('/accomplishments'),
         api.get('/gad-plans?status=APPROVED')
       ]);
-      setAccs(accResponse.data);
-      setGadPlans(plansResponse.data);
+      const accList = accResponse.data?.data ?? accResponse.data;
+      const planList = plansResponse.data?.data ?? plansResponse.data;
+      setAccs(Array.isArray(accList) ? accList : []);
+      setGadPlans(Array.isArray(planList) ? planList : []);
     } catch (error) {
       toast.error('Failed to fetch accomplishments');
+      setAccs([]);
+      setGadPlans([]);
     } finally {
       setLoading(false);
     }
@@ -68,21 +70,21 @@ const Accomplishments: React.FC = () => {
   const handleEdit = (a: any) => {
     setEditingId(a.id);
     setFormData({
-      gadPlanId: a.gadPlanId.toString(),
-      actualOutput: a.actualOutput,
-      actualBeneficiaryMale: a.actualBeneficiaryMale.toString(),
-      actualBeneficiaryFemale: a.actualBeneficiaryFemale.toString(),
-      actualBudgetUsed: a.actualBudgetUsed.toString(),
+      gadPlanId: (a.gadPlanId || a.gadPlanItemId || a.gadPlan?.id || '').toString(),
+      actualOutput: a.actualOutput || '',
+      actualBeneficiaryMale: (a.actualBeneficiaryMale ?? a.actualMale ?? 0).toString(),
+      actualBeneficiaryFemale: (a.actualBeneficiaryFemale ?? a.actualFemale ?? 0).toString(),
+      actualBudgetUsed: (a.actualBudgetUsed ?? 0).toString(),
       remarks: a.remarks || ''
     });
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Delete this accomplishment record?')) return;
     try {
       await api.delete(`/accomplishments/${id}`);
-      toast.success('Deleted');
+      toast.success('Deleted successfully');
       fetchData();
     } catch (error) {
       toast.error('Failed to delete');
@@ -95,27 +97,31 @@ const Accomplishments: React.FC = () => {
     setIsSubmitting(true);
     try {
       const payload = {
-        ...formData,
-        gadPlanId: parseInt(formData.gadPlanId),
-        actualBeneficiaryMale: parseInt(formData.actualBeneficiaryMale),
-        actualBeneficiaryFemale: parseInt(formData.actualBeneficiaryFemale),
-        actualBudgetUsed: parseFloat(formData.actualBudgetUsed)
+        gadPlanId: formData.gadPlanId,
+        actualOutput: formData.actualOutput,
+        actualBeneficiaryMale: parseInt(formData.actualBeneficiaryMale) || 0,
+        actualBeneficiaryFemale: parseInt(formData.actualBeneficiaryFemale) || 0,
+        actualBudgetUsed: parseFloat(formData.actualBudgetUsed) || 0,
+        remarks: formData.remarks
       };
       if (editingId) {
         await api.put(`/accomplishments/${editingId}`, payload);
-        toast.success('Updated');
+        toast.success('Updated successfully');
       } else {
         await api.post('/accomplishments', payload);
-        toast.success('Added');
+        toast.success('Added successfully');
       }
       setIsModalOpen(false);
       fetchData();
-    } catch (error) {
-      toast.error('Failed to save');
+    } catch (error: any) {
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to save accomplishment';
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const isViewer = hasRole('VIEWER') && !isAdmin && !hasRole('ENCODER');
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
@@ -124,7 +130,7 @@ const Accomplishments: React.FC = () => {
           <h1 className="text-3xl font-bold tracking-tight text-[#111827]">Accomplishment Report (GAR)</h1>
           <p className="text-sm font-medium text-[#6B7280]">Record achievements against the approved GAD Plan</p>
         </div>
-        {user?.role !== 'VIEWER' && (
+        {!isViewer && (
           <Button onClick={handleOpenAdd} className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg shadow-sm font-semibold px-6">
             <Plus className="h-4 w-4 mr-2" /> Add Achievement
           </Button>
@@ -145,35 +151,38 @@ const Accomplishments: React.FC = () => {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-24 text-[#6366F1] animate-pulse font-bold text-lg"><Loader2 className="h-10 w-10 animate-spin mx-auto mb-2" /> Loading accomplishments...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-24 text-[#6366F1] font-bold text-lg"><Loader2 className="h-10 w-10 animate-spin mx-auto mb-2" /> Loading accomplishments...</TableCell></TableRow>
               ) : accs.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="text-center py-24 text-[#9CA3AF] italic text-sm">No achievements recorded yet</TableCell></TableRow>
               ) : accs.map((a) => {
-                const totalTarget = a.gadPlan.budget;
-                const totalActual = a.actualBudgetUsed;
-                const utilization = (totalActual / totalTarget) * 100;
+                const totalTarget = Number(a.gadPlan?.budget ?? a.program?.budgetTarget ?? 1);
+                const totalActual = Number(a.actualBudgetUsed ?? 0);
+                const utilization = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+                const actMale = Number(a.actualBeneficiaryMale ?? a.actualMale ?? 0);
+                const actFemale = Number(a.actualBeneficiaryFemale ?? a.actualFemale ?? 0);
+                const planActivity = a.gadPlan?.activity || a.program?.title || 'GAD Activity';
                 
                 return (
                   <TableRow key={a.id} className="hover:bg-indigo-50/20 border-b border-gray-50 last:border-0 transition-colors group">
                     <TableCell className="py-5 pl-6">
-                      <div className="font-bold text-[#111827] text-sm leading-tight mb-1">{a.gadPlan.activity}</div>
+                      <div className="font-bold text-[#111827] text-sm leading-tight mb-1">{planActivity}</div>
                       <div className="text-[11px] text-[#6B7280] font-medium italic line-clamp-1 bg-gray-50 py-1 px-2 rounded-md inline-block">
                         {a.actualOutput}
                       </div>
                     </TableCell>
                     <TableCell className="py-5">
                       <div className="text-sm font-bold text-[#111827]">
-                        {(a.actualBeneficiaryMale + a.actualBeneficiaryFemale).toLocaleString()} <span className="text-[10px] text-[#6B7280] font-medium ml-1">total</span>
+                        {(actMale + actFemale).toLocaleString()} <span className="text-[10px] text-[#6B7280] font-medium ml-1">total</span>
                       </div>
                       <div className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF] mt-1 space-x-2">
-                        <span>M: {a.actualBeneficiaryMale}</span>
+                        <span>M: {actMale}</span>
                         <span className="text-gray-300">|</span>
-                        <span>F: {a.actualBeneficiaryFemale}</span>
+                        <span>F: {actFemale}</span>
                       </div>
                     </TableCell>
                     <TableCell className="py-5">
-                      <div className="font-bold text-[#111827] text-sm">₱{a.actualBudgetUsed.toLocaleString()}</div>
-                      <div className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mt-1">Target: ₱{a.gadPlan.budget.toLocaleString()}</div>
+                      <div className="font-bold text-[#111827] text-sm">₱{totalActual.toLocaleString()}</div>
+                      <div className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mt-1">Target: ₱{totalTarget.toLocaleString()}</div>
                     </TableCell>
                     <TableCell className="py-5">
                       <div className="space-y-2">
@@ -193,10 +202,10 @@ const Accomplishments: React.FC = () => {
                     </TableCell>
                     <TableCell className="text-right py-5 pr-6">
                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {user?.role !== 'VIEWER' && (
+                        {!isViewer && (
                           <Button variant="ghost" size="icon" onClick={() => handleEdit(a)} className="h-8 w-8 text-[#6366F1] hover:bg-white hover:shadow-sm"><Edit className="h-4 w-4" /></Button>
                         )}
-                        {user?.role === 'ADMIN' && (
+                        {isAdmin && (
                           <Button variant="ghost" size="icon" onClick={() => handleDelete(a.id)} className="h-8 w-8 text-red-400 hover:bg-white hover:shadow-sm"><Trash2 className="h-4 w-4" /></Button>
                         )}
                       </div>
@@ -225,8 +234,8 @@ const Accomplishments: React.FC = () => {
                 <SelectContent className="rounded-xl overflow-hidden shadow-2xl">
                   {gadPlans.map(p => (
                     <SelectItem key={p.id} value={p.id.toString()} className="hover:bg-[#EEF2FF] py-3 cursor-pointer">
-                      <span className="font-bold block">{p.activity}</span>
-                      <span className="text-[10px] text-[#6B7280] font-medium uppercase tracking-wider">{p.office} • Budget: ₱{p.budget.toLocaleString()}</span>
+                      <span className="font-bold block">{p.activity || p.title}</span>
+                      <span className="text-[10px] text-[#6B7280] font-medium uppercase tracking-wider">{p.office || ''} • Budget: ₱{Number(p.budget ?? 0).toLocaleString()}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>

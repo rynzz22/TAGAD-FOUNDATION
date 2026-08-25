@@ -1,26 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../modules/auth/AuthContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Badge } from '../components/ui/badge';
 import { cn } from '../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
 import { Plus, Edit, Trash2, CheckCircle, Send, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
 
 const GADPlan: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isAdmin, hasRole } = useAuth();
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const defaultOfficeName = user?.office?.code || user?.office?.name || '';
 
   const [formData, setFormData] = useState({
     year: new Date().getFullYear().toString(),
@@ -40,10 +40,12 @@ const GADPlan: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get(`/gad-plans?year=${year}`);
-      setPlans(data);
+      const response = await api.get(`/gad-plans?year=${year}`);
+      const payload = response.data?.data ?? response.data;
+      setPlans(Array.isArray(payload) ? payload : []);
     } catch (error) {
       toast.error('Failed to fetch GAD plans');
+      setPlans([]);
     } finally {
       setLoading(false);
     }
@@ -57,7 +59,7 @@ const GADPlan: React.FC = () => {
     setEditingId(null);
     setFormData({
       year: year.toString(),
-      office: user?.office || '',
+      office: defaultOfficeName,
       genderIssue: '',
       causeOfIssue: '',
       gadResult: '',
@@ -65,7 +67,7 @@ const GADPlan: React.FC = () => {
       performanceIndicator: '',
       targetGroup: '',
       timeline: '',
-      responsibleOffice: user?.office || '',
+      responsibleOffice: defaultOfficeName,
       budget: '',
       fundSource: 'GAD Budget'
     });
@@ -75,37 +77,38 @@ const GADPlan: React.FC = () => {
   const handleEdit = (p: any) => {
     setEditingId(p.id);
     setFormData({
-      year: p.year.toString(),
-      office: p.office,
-      genderIssue: p.genderIssue,
-      causeOfIssue: p.causeOfIssue,
-      gadResult: p.gadResult,
-      activity: p.activity,
-      performanceIndicator: p.performanceIndicator,
-      targetGroup: p.targetGroup,
-      timeline: p.timeline,
-      responsibleOffice: p.responsibleOffice,
-      budget: p.budget.toString(),
-      fundSource: p.fundSource
+      year: (p.year ?? p.fiscalYear ?? year).toString(),
+      office: p.office || defaultOfficeName,
+      genderIssue: p.genderIssue || '',
+      causeOfIssue: p.causeOfIssue || '',
+      gadResult: p.gadResult || '',
+      activity: p.activity || '',
+      performanceIndicator: p.performanceIndicator || '',
+      targetGroup: p.targetGroup || '',
+      timeline: p.timeline || '',
+      responsibleOffice: p.responsibleOffice || p.office || defaultOfficeName,
+      budget: (p.budget ?? 0).toString(),
+      fundSource: p.fundSource || 'GAD Budget'
     });
     setIsModalOpen(true);
   };
 
-  const handleStatusUpdate = async (id: number, status: string) => {
+  const handleStatusUpdate = async (id: string, status: string) => {
     try {
       await api.patch(`/gad-plans/${id}/status`, { status });
       toast.success(`Plan ${status.toLowerCase()} successfully`);
       fetchData();
-    } catch (error) {
-      toast.error('Failed to update status');
+    } catch (error: any) {
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to update status';
+      toast.error(msg);
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this plan entry?')) return;
     try {
       await api.delete(`/gad-plans/${id}`);
-      toast.success('Deleted');
+      toast.success('Deleted successfully');
       fetchData();
     } catch (error) {
       toast.error('Failed to delete');
@@ -116,22 +119,29 @@ const GADPlan: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const payload = { ...formData, year: parseInt(formData.year), budget: parseFloat(formData.budget) };
+      const payload = {
+        ...formData,
+        year: parseInt(formData.year) || year,
+        budget: parseFloat(formData.budget) || 0
+      };
       if (editingId) {
         await api.put(`/gad-plans/${editingId}`, payload);
-        toast.success('Updated');
+        toast.success('Updated successfully');
       } else {
         await api.post('/gad-plans', payload);
-        toast.success('Added');
+        toast.success('Added successfully');
       }
       setIsModalOpen(false);
       fetchData();
-    } catch (error) {
-      toast.error('Failed to save');
+    } catch (error: any) {
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to save plan entry';
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const isViewer = hasRole('VIEWER') && !isAdmin && !hasRole('ENCODER');
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
@@ -148,10 +158,10 @@ const GADPlan: React.FC = () => {
               value={year}
               onChange={(e) => setYear(parseInt(e.target.value))}
             >
-              {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+              {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
-          {user?.role !== 'VIEWER' && (
+          {!isViewer && (
             <Button onClick={handleOpenAdd} className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg shadow-sm font-semibold">
               <Plus className="h-4 w-4 mr-2" /> Add Entry
             </Button>
@@ -177,45 +187,49 @@ const GADPlan: React.FC = () => {
                 <TableRow><TableCell colSpan={6} className="text-center py-24"><Loader2 className="h-10 w-10 animate-spin mx-auto text-[#6366F1]" /></TableCell></TableRow>
               ) : plans.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center py-24 text-[#9CA3AF] italic text-sm">No plans found for this year</TableCell></TableRow>
-              ) : plans.map((p) => (
-                <TableRow key={p.id} className="hover:bg-indigo-50/20 border-b border-gray-50 last:border-0 transition-colors group">
-                  <TableCell className="py-4 pl-6">
-                    <div className="font-bold text-[#111827] text-sm leading-tight">{p.genderIssue}</div>
-                    <div className="text-[11px] text-[#6366F1] font-bold mt-1.5 uppercase tracking-wide">{p.activity}</div>
-                  </TableCell>
-                  <TableCell className="text-[#374151] py-4">{p.office}</TableCell>
-                  <TableCell className="font-bold text-[#111827] whitespace-nowrap py-4">₱{p.budget.toLocaleString()}</TableCell>
-                  <TableCell className="text-[#6B7280] text-xs font-medium py-4">{p.fundSource}</TableCell>
-                  <TableCell className="py-4">
-                    <span className={cn(
-                      "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest",
-                      p.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600' : 
-                      p.status === 'SUBMITTED' ? 'bg-[#EEF2FF] text-[#6366F1]' : 'bg-gray-100 text-[#6B7280]'
-                    )}>
-                      {p.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right py-4 pr-6">
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {p.status === 'DRAFT' && user?.role !== 'VIEWER' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(p)} className="h-8 w-8 text-[#6366F1] hover:bg-white hover:shadow-sm"><Edit className="h-4 w-4" /></Button>
-                      )}
-                      {p.status === 'DRAFT' && user?.role !== 'VIEWER' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleStatusUpdate(p.id, 'SUBMITTED')} className="h-8 w-8 text-[#6366F1] hover:bg-white hover:shadow-sm"><Send className="h-4 w-4" /></Button>
-                      )}
-                      {p.status === 'SUBMITTED' && user?.role === 'ADMIN' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleStatusUpdate(p.id, 'APPROVED')} className="h-8 w-8 text-emerald-600 hover:bg-white hover:shadow-sm"><CheckCircle className="h-4 w-4" /></Button>
-                      )}
-                      {p.status === 'SUBMITTED' && user?.role === 'ADMIN' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleStatusUpdate(p.id, 'DRAFT')} className="h-8 w-8 text-orange-500 hover:bg-white hover:shadow-sm"><Trash2 className="h-4 w-4 rotate-180" /></Button>
-                      )}
-                      {user?.role === 'ADMIN' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(p.id)} className="h-8 w-8 text-red-400 hover:bg-white hover:shadow-sm"><Trash2 className="h-4 w-4" /></Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              ) : plans.map((p) => {
+                const budgetVal = Number(p.budget ?? 0);
+                const statusNormalized = (p.status || 'DRAFT').toUpperCase();
+                return (
+                  <TableRow key={p.id} className="hover:bg-indigo-50/20 border-b border-gray-50 last:border-0 transition-colors group">
+                    <TableCell className="py-4 pl-6">
+                      <div className="font-bold text-[#111827] text-sm leading-tight">{p.genderIssue}</div>
+                      <div className="text-[11px] text-[#6366F1] font-bold mt-1.5 uppercase tracking-wide">{p.activity}</div>
+                    </TableCell>
+                    <TableCell className="text-[#374151] py-4">{p.office || defaultOfficeName}</TableCell>
+                    <TableCell className="font-bold text-[#111827] whitespace-nowrap py-4">₱{budgetVal.toLocaleString()}</TableCell>
+                    <TableCell className="text-[#6B7280] text-xs font-medium py-4">{p.fundSource}</TableCell>
+                    <TableCell className="py-4">
+                      <span className={cn(
+                        "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest",
+                        statusNormalized === 'APPROVED' ? 'bg-emerald-50 text-emerald-600' : 
+                        statusNormalized === 'SUBMITTED' ? 'bg-[#EEF2FF] text-[#6366F1]' : 'bg-gray-100 text-[#6B7280]'
+                      )}>
+                        {statusNormalized}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right py-4 pr-6">
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {statusNormalized === 'DRAFT' && !isViewer && (
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(p)} className="h-8 w-8 text-[#6366F1] hover:bg-white hover:shadow-sm"><Edit className="h-4 w-4" /></Button>
+                        )}
+                        {statusNormalized === 'DRAFT' && !isViewer && (
+                          <Button variant="ghost" size="icon" onClick={() => handleStatusUpdate(p.id, 'SUBMITTED')} className="h-8 w-8 text-[#6366F1] hover:bg-white hover:shadow-sm"><Send className="h-4 w-4" /></Button>
+                        )}
+                        {statusNormalized === 'SUBMITTED' && isAdmin && (
+                          <Button variant="ghost" size="icon" onClick={() => handleStatusUpdate(p.id, 'APPROVED')} className="h-8 w-8 text-emerald-600 hover:bg-white hover:shadow-sm"><CheckCircle className="h-4 w-4" /></Button>
+                        )}
+                        {statusNormalized === 'SUBMITTED' && isAdmin && (
+                          <Button variant="ghost" size="icon" onClick={() => handleStatusUpdate(p.id, 'DRAFT')} className="h-8 w-8 text-orange-500 hover:bg-white hover:shadow-sm"><Trash2 className="h-4 w-4 rotate-180" /></Button>
+                        )}
+                        {isAdmin && (
+                          <Button variant="ghost" size="icon" onClick={() => handleDelete(p.id)} className="h-8 w-8 text-red-400 hover:bg-white hover:shadow-sm"><Trash2 className="h-4 w-4" /></Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>

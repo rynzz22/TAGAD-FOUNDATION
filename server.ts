@@ -1,8 +1,8 @@
+import 'dotenv/config';
 import express, { Request, Response, NextFunction } from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import cors from 'cors';
-import dotenv from 'dotenv';
 
 // Route imports
 import authRoutes from './server/routes/auth';
@@ -18,8 +18,6 @@ import accomplishmentRoutes from './server/routes/accomplishments';
 import dashboardRoutes from './server/routes/dashboard';
 import reportRoutes from './server/routes/reports';
 import { sendError } from './server/lib/response';
-
-dotenv.config();
 
 async function startServer() {
   const app = express();

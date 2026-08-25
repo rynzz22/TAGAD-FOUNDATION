@@ -1,26 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { useAuth } from '../modules/auth/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
 import { Plus, Edit, Trash2, Loader2, Target } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
-import { Progress } from '../components/ui/progress';
+import { Card, CardContent } from '../components/ui/card';
 import { cn } from '../lib/utils';
 
 const ProgramMonitoring: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isAdmin, hasRole } = useAuth();
   const [programs, setPrograms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     title: '',
@@ -29,7 +26,7 @@ const ProgramMonitoring: React.FC = () => {
     sector: '',
     budget: '',
     year: new Date().getFullYear().toString(),
-    status: 'Active',
+    status: 'ACTIVE',
     targetMale: '0',
     targetFemale: '0',
     actualMale: '0',
@@ -39,10 +36,12 @@ const ProgramMonitoring: React.FC = () => {
   const fetchPrograms = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/programs');
-      setPrograms(data);
+      const response = await api.get('/programs');
+      const payload = response.data?.data ?? response.data;
+      setPrograms(Array.isArray(payload) ? payload : []);
     } catch (error) {
       toast.error('Failed to fetch programs');
+      setPrograms([]);
     } finally {
       setLoading(false);
     }
@@ -52,16 +51,18 @@ const ProgramMonitoring: React.FC = () => {
     fetchPrograms();
   }, []);
 
+  const defaultOfficeName = user?.office?.code || user?.office?.name || '';
+
   const handleOpenAdd = () => {
     setEditingId(null);
     setFormData({
       title: '',
       description: '',
-      office: user?.office || '',
+      office: defaultOfficeName,
       sector: '',
       budget: '',
       year: new Date().getFullYear().toString(),
-      status: 'Active',
+      status: 'ACTIVE',
       targetMale: '0',
       targetFemale: '0',
       actualMale: '0',
@@ -73,26 +74,26 @@ const ProgramMonitoring: React.FC = () => {
   const handleEdit = (p: any) => {
     setEditingId(p.id);
     setFormData({
-      title: p.title,
+      title: p.title || '',
       description: p.description || '',
-      office: p.office,
-      sector: p.sector,
-      budget: p.budget.toString(),
-      year: p.year.toString(),
-      status: p.status,
-      targetMale: p.targetMale.toString(),
-      targetFemale: p.targetFemale.toString(),
-      actualMale: p.actualMale.toString(),
-      actualFemale: p.actualFemale.toString()
+      office: p.office || p.officeName || defaultOfficeName,
+      sector: p.sector || '',
+      budget: (p.budget ?? p.budgetTarget ?? 0).toString(),
+      year: (p.year ?? p.fiscalYear ?? new Date().getFullYear()).toString(),
+      status: p.status || 'ACTIVE',
+      targetMale: (p.targetMale ?? 0).toString(),
+      targetFemale: (p.targetFemale ?? 0).toString(),
+      actualMale: (p.actualMale ?? 0).toString(),
+      actualFemale: (p.actualFemale ?? 0).toString()
     });
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this program?')) return;
     try {
       await api.delete(`/programs/${id}`);
-      toast.success('Program deleted');
+      toast.success('Program deleted successfully');
       fetchPrograms();
     } catch (error) {
       toast.error('Failed to delete program');
@@ -104,29 +105,37 @@ const ProgramMonitoring: React.FC = () => {
     setIsSubmitting(true);
     try {
       const payload = {
-        ...formData,
-        year: parseInt(formData.year),
-        budget: parseFloat(formData.budget),
-        targetMale: parseInt(formData.targetMale),
-        targetFemale: parseInt(formData.targetFemale),
-        actualMale: parseInt(formData.actualMale),
-        actualFemale: parseInt(formData.actualFemale)
+        title: formData.title,
+        description: formData.description,
+        office: formData.office,
+        sector: formData.sector,
+        year: parseInt(formData.year) || new Date().getFullYear(),
+        budget: parseFloat(formData.budget) || 0,
+        status: formData.status,
+        targetMale: parseInt(formData.targetMale) || 0,
+        targetFemale: parseInt(formData.targetFemale) || 0,
+        actualMale: parseInt(formData.actualMale) || 0,
+        actualFemale: parseInt(formData.actualFemale) || 0
       };
+
       if (editingId) {
         await api.put(`/programs/${editingId}`, payload);
-        toast.success('Program updated');
+        toast.success('Program updated successfully');
       } else {
         await api.post('/programs', payload);
-        toast.success('Program created');
+        toast.success('Program created successfully');
       }
       setIsModalOpen(false);
       fetchPrograms();
-    } catch (error) {
-      toast.error('Failed to save program');
+    } catch (error: any) {
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to save program';
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const isViewer = hasRole('VIEWER') && !isAdmin && !hasRole('ENCODER');
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
@@ -135,7 +144,7 @@ const ProgramMonitoring: React.FC = () => {
           <h1 className="text-3xl font-bold tracking-tight text-[#111827]">Program Monitoring</h1>
           <p className="text-sm font-medium text-[#6B7280]">Track GAD-related programs and actual vs target impact</p>
         </div>
-        {user?.role !== 'VIEWER' && (
+        {!isViewer && (
           <Button onClick={handleOpenAdd} className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg shadow-sm font-semibold">
             <Plus className="h-4 w-4 mr-2" /> New Program
           </Button>
@@ -145,12 +154,31 @@ const ProgramMonitoring: React.FC = () => {
       <div className="grid gap-6">
         {loading ? (
           <div className="py-24 flex justify-center"><Loader2 className="h-10 w-10 animate-spin text-[#6366F1]" /></div>
+        ) : programs.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center">
+            <Target className="h-12 w-12 text-[#9CA3AF] mx-auto mb-4" />
+            <h3 className="text-lg font-bold text-[#111827]">No Programs Found</h3>
+            <p className="text-sm text-[#6B7280] max-w-md mx-auto mt-1 mb-6">
+              There are no GAD programs recorded for this period yet.
+            </p>
+            {!isViewer && (
+              <Button onClick={handleOpenAdd} className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg font-semibold">
+                <Plus className="h-4 w-4 mr-2" /> Create First Program
+              </Button>
+            )}
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {programs.map((p) => {
-              const totalTarget = p.targetMale + p.targetFemale;
-              const totalActual = p.actualMale + p.actualFemale;
+              const targetM = Number(p.targetMale) || 0;
+              const targetF = Number(p.targetFemale) || 0;
+              const actualM = Number(p.actualMale) || 0;
+              const actualF = Number(p.actualFemale) || 0;
+              const totalTarget = targetM + targetF;
+              const totalActual = actualM + actualF;
               const progress = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+              const budgetVal = Number(p.budget ?? p.budgetTarget ?? 0);
+              const statusNormalized = (p.status || 'ACTIVE').toUpperCase();
               
               return (
                 <Card key={p.id} className="border-[#E5E7EB] shadow-sm h-full flex flex-col bg-white rounded-2xl overflow-hidden hover:shadow-lg transition-all duration-300 group">
@@ -159,14 +187,14 @@ const ProgramMonitoring: React.FC = () => {
                       <h3 className="text-lg font-bold text-[#111827] line-clamp-1">{p.title}</h3>
                       <div className="flex gap-2">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-[#6B7280] uppercase tracking-wider">
-                          {p.sector}
+                          {p.sector || 'General'}
                         </span>
                         <span className={cn(
                           "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest",
-                          p.status === 'Active' ? 'bg-[#EEF2FF] text-[#6366F1]' : 
-                          p.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
+                          statusNormalized === 'ACTIVE' ? 'bg-[#EEF2FF] text-[#6366F1]' : 
+                          statusNormalized === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
                         )}>
-                          {p.status}
+                          {statusNormalized}
                         </span>
                       </div>
                     </div>
@@ -193,21 +221,21 @@ const ProgramMonitoring: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-[#F9FAFB] p-3 rounded-xl border border-gray-100">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">Budget</p>
-                        <p className="text-sm font-bold text-[#111827]">₱{p.budget.toLocaleString()}</p>
+                        <p className="text-sm font-bold text-[#111827]">₱{budgetVal.toLocaleString()}</p>
                       </div>
                       <div className="bg-[#F9FAFB] p-3 rounded-xl border border-gray-100">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">Office</p>
-                        <p className="text-sm font-bold text-[#111827] truncate">{p.office}</p>
+                        <p className="text-sm font-bold text-[#111827] truncate">{p.office || p.officeName || 'General'}</p>
                       </div>
                     </div>
 
                     <div className="flex justify-end gap-2 pt-4 border-t border-gray-50 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {user?.role !== 'VIEWER' && (
+                      {!isViewer && (
                         <Button variant="ghost" size="sm" onClick={() => handleEdit(p)} className="h-9 px-4 text-[#6366F1] font-semibold hover:bg-[#EEF2FF] rounded-lg">
                           <Edit className="h-4 w-4 mr-2" /> Edit
                         </Button>
                       )}
-                      {user?.role === 'ADMIN' && (
+                      {isAdmin && (
                         <Button variant="ghost" size="sm" onClick={() => handleDelete(p.id)} className="h-9 px-4 text-red-400 font-semibold hover:bg-red-50 rounded-lg">
                           <Trash2 className="h-4 w-4 mr-2" /> Delete
                         </Button>
@@ -294,9 +322,10 @@ const ProgramMonitoring: React.FC = () => {
               <Select value={formData.status} onValueChange={val => setFormData({...formData, status: val})}>
                 <SelectTrigger className="rounded-lg border-[#D1D5DB] py-6"><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent className="rounded-xl">
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Completed">Completed</SelectItem>
-                  <SelectItem value="Cancelled">Cancelled</SelectItem>
+                  <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                  <SelectItem value="COMPLETED">COMPLETED</SelectItem>
+                  <SelectItem value="CANCELLED">CANCELLED</SelectItem>
+                  <SelectItem value="DRAFT">DRAFT</SelectItem>
                 </SelectContent>
               </Select>
             </div>

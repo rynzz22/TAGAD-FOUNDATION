@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../modules/auth/AuthContext';
 import { Table as ShinyTable, TableBody as ShinyBody, TableHeader as ShinyHeader, TableHead as ShinyHead, TableRow as ShinyRow, TableCell as ShinyCell } from '../components/ui/table';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Badge } from '../components/ui/badge';
 import { cn } from '../lib/utils';
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter 
@@ -12,8 +11,8 @@ import {
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Search, Plus, Filter, Edit, Archive, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { Search, Plus, Edit, Archive, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Card, CardContent } from '../components/ui/card';
 
 const BARANGAYS = [
   "Bagong Silang", "Balintawak", "Burgos", "Calanggaman", "Calituban", "Comadog", "Cortez", 
@@ -30,7 +29,7 @@ const SECTORS = [
 const SEXES = ["MALE", "FEMALE"];
 
 const DataEncoding: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isAdmin, hasRole } = useAuth();
   const [beneficiaries, setBeneficiaries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ total: 0, page: 1, totalPages: 1 });
@@ -39,7 +38,10 @@ const DataEncoding: React.FC = () => {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const defaultOfficeName = user?.office?.code || user?.office?.name || '';
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -54,13 +56,20 @@ const DataEncoding: React.FC = () => {
   const fetchData = async (page = 1) => {
     setLoading(true);
     try {
-      const { data } = await api.get('/beneficiaries', {
+      const response = await api.get('/beneficiaries', {
         params: { ...filters, page, limit: 10, search }
       });
-      setBeneficiaries(data.data);
-      setPagination(data.pagination);
+      const dataPayload = response.data?.data ?? [];
+      const paginationPayload = response.data?.pagination ?? {
+        total: Array.isArray(dataPayload) ? dataPayload.length : 0,
+        page: page,
+        totalPages: 1
+      };
+      setBeneficiaries(Array.isArray(dataPayload) ? dataPayload : []);
+      setPagination(paginationPayload);
     } catch (error) {
       toast.error('Failed to fetch beneficiaries');
+      setBeneficiaries([]);
     } finally {
       setLoading(false);
     }
@@ -80,7 +89,7 @@ const DataEncoding: React.FC = () => {
       barangay: '',
       sector: '',
       program: '',
-      office: user?.office || ''
+      office: defaultOfficeName
     });
     setIsModalOpen(true);
   };
@@ -88,23 +97,23 @@ const DataEncoding: React.FC = () => {
   const handleEdit = (b: any) => {
     setEditingId(b.id);
     setFormData({
-      firstName: b.firstName,
-      lastName: b.lastName,
-      sex: b.sex,
-      age: b.age.toString(),
-      barangay: b.barangay,
-      sector: b.sector,
-      program: b.program,
-      office: b.office
+      firstName: b.firstName || '',
+      lastName: b.lastName || '',
+      sex: b.sex || '',
+      age: (b.age ?? '').toString(),
+      barangay: b.barangay || b.barangayName || '',
+      sector: b.sector || '',
+      program: b.program || b.programName || '',
+      office: b.office || b.officeName || defaultOfficeName
     });
     setIsModalOpen(true);
   };
 
-  const handleArchive = async (id: number) => {
+  const handleArchive = async (id: string) => {
     if (!confirm('Are you sure you want to archive this record?')) return;
     try {
       await api.delete(`/beneficiaries/${id}`);
-      toast.success('Record archived');
+      toast.success('Record archived successfully');
       fetchData(pagination.page);
     } catch (error) {
       toast.error('Failed to archive record');
@@ -115,22 +124,28 @@ const DataEncoding: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const payload = { ...formData, age: parseInt(formData.age) };
+      const payload = {
+        ...formData,
+        age: parseInt(formData.age) || 0
+      };
       if (editingId) {
         await api.put(`/beneficiaries/${editingId}`, payload);
-        toast.success('Record updated');
+        toast.success('Record updated successfully');
       } else {
         await api.post('/beneficiaries', payload);
         toast.success('Record added successfully');
       }
       setIsModalOpen(false);
       fetchData(pagination.page);
-    } catch (error) {
-      toast.error('Failed to save record');
+    } catch (error: any) {
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to save record';
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const isViewer = hasRole('VIEWER') && !isAdmin && !hasRole('ENCODER');
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
@@ -140,7 +155,7 @@ const DataEncoding: React.FC = () => {
           <p className="text-sm font-medium text-[#6B7280]">Manage and track GAD beneficiaries</p>
         </div>
         <div className="flex gap-2">
-          {user?.role !== 'VIEWER' && (
+          {!isViewer && (
             <Button onClick={handleOpenAdd} className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg shadow-sm font-semibold">
               <Plus className="h-4 w-4 mr-2" /> Add Beneficiary
             </Button>
@@ -219,67 +234,75 @@ const DataEncoding: React.FC = () => {
                     </ShinyRow>
                   </ShinyHeader>
                   <ShinyBody>
-                    {beneficiaries.map((b) => (
-                      <ShinyRow key={b.id} className="hover:bg-indigo-50/20 border-b border-gray-50 last:border-0 transition-colors group">
-                        <ShinyCell className="font-semibold text-[#111827] py-4 pl-6">{b.firstName} {b.lastName}</ShinyCell>
-                        <ShinyCell className="py-4">
-                          <span className={cn(
-                            "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold",
-                            b.sex === 'MALE' ? 'bg-[#EEF2FF] text-[#6366F1]' : 'bg-pink-50 text-pink-600'
-                          )}>
-                            {b.sex}
-                          </span>
-                        </ShinyCell>
-                        <ShinyCell className="text-[#374151] py-4">{b.age}</ShinyCell>
-                        <ShinyCell className="text-[#374151] py-4">{b.barangay}</ShinyCell>
-                        <ShinyCell className="text-[#374151] py-4">{b.sector}</ShinyCell>
-                        <ShinyCell className="max-w-[180px] truncate text-[#374151] py-4">{b.program}</ShinyCell>
-                        <ShinyCell className="text-[#6B7280] py-4">{b.office}</ShinyCell>
-                        <ShinyCell className="text-[#9CA3AF] text-xs font-medium py-4">
-                          {new Date(b.dateEncoded).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </ShinyCell>
-                        <ShinyCell className="text-right py-4 pr-6">
-                          <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {user?.role !== 'VIEWER' && (
-                              <Button variant="ghost" size="icon" onClick={() => handleEdit(b)} className="h-8 w-8 text-[#6366F1] hover:bg-white hover:shadow-sm">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {user?.role === 'ADMIN' && (
-                              <Button variant="ghost" size="icon" onClick={() => handleArchive(b.id)} className="h-8 w-8 text-red-400 hover:bg-white hover:shadow-sm">
-                                <Archive className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
+                    {beneficiaries.length === 0 ? (
+                      <ShinyRow>
+                        <ShinyCell colSpan={9} className="text-center py-16 text-[#9CA3AF] italic text-sm">
+                          No beneficiary records found.
                         </ShinyCell>
                       </ShinyRow>
-                    ))}
+                    ) : (
+                      beneficiaries.map((b) => (
+                        <ShinyRow key={b.id} className="hover:bg-indigo-50/20 border-b border-gray-50 last:border-0 transition-colors group">
+                          <ShinyCell className="font-semibold text-[#111827] py-4 pl-6">{b.firstName} {b.lastName}</ShinyCell>
+                          <ShinyCell className="py-4">
+                            <span className={cn(
+                              "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold",
+                              b.sex === 'MALE' ? 'bg-[#EEF2FF] text-[#6366F1]' : 'bg-pink-50 text-pink-600'
+                            )}>
+                              {b.sex}
+                            </span>
+                          </ShinyCell>
+                          <ShinyCell className="text-[#374151] py-4">{b.age}</ShinyCell>
+                          <ShinyCell className="text-[#374151] py-4">{b.barangay || b.barangayName || ''}</ShinyCell>
+                          <ShinyCell className="text-[#374151] py-4">{b.sector}</ShinyCell>
+                          <ShinyCell className="max-w-[180px] truncate text-[#374151] py-4">{b.program || b.programName || '-'}</ShinyCell>
+                          <ShinyCell className="text-[#6B7280] py-4">{b.office || b.officeName || defaultOfficeName}</ShinyCell>
+                          <ShinyCell className="text-[#9CA3AF] text-xs font-medium py-4">
+                            {b.dateEncoded || b.createdAt ? new Date(b.dateEncoded || b.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
+                          </ShinyCell>
+                          <ShinyCell className="text-right py-4 pr-6">
+                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {!isViewer && (
+                                <Button variant="ghost" size="icon" onClick={() => handleEdit(b)} className="h-8 w-8 text-[#6366F1] hover:bg-white hover:shadow-sm">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {isAdmin && (
+                                <Button variant="ghost" size="icon" onClick={() => handleArchive(b.id)} className="h-8 w-8 text-red-400 hover:bg-white hover:shadow-sm">
+                                  <Archive className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </ShinyCell>
+                        </ShinyRow>
+                      ))
+                    )}
                   </ShinyBody>
                 </ShinyTable>
               </div>
 
               <div className="flex items-center justify-between mt-8 px-2">
                 <p className="text-xs font-semibold text-[#9CA3AF] uppercase tracking-wider">
-                  Showing <span className="text-[#6B7280]">{(pagination.page - 1) * pagination.total + 1}</span> to <span className="text-[#6B7280]">{Math.min(pagination.page * pagination.total, pagination.total)}</span> of <span className="text-[#6B7280]">{pagination.total}</span> records
+                  Showing <span className="text-[#6B7280]">{pagination.total > 0 ? (pagination.page - 1) * 10 + 1 : 0}</span> to <span className="text-[#6B7280]">{Math.min(pagination.page * 10, pagination.total)}</span> of <span className="text-[#6B7280]">{pagination.total}</span> records
                 </p>
                 <div className="flex items-center gap-3">
                   <Button 
                     variant="outline" 
                     size="sm"
                     className="border-[#D1D5DB] rounded-lg h-9 w-9 p-0"
-                    disabled={pagination.page === 1}
+                    disabled={pagination.page <= 1}
                     onClick={() => fetchData(pagination.page - 1)}
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <div className="h-9 px-4 bg-white border border-[#E5E7EB] rounded-lg flex items-center shadow-sm">
-                    <span className="text-xs font-bold text-[#111827]">Page {pagination.page} of {pagination.totalPages}</span>
+                    <span className="text-xs font-bold text-[#111827]">Page {pagination.page} of {Math.max(pagination.totalPages, 1)}</span>
                   </div>
                   <Button 
                     variant="outline" 
                     size="sm"
                     className="border-[#D1D5DB] rounded-lg h-9 w-9 p-0"
-                    disabled={pagination.page === pagination.totalPages}
+                    disabled={pagination.page >= pagination.totalPages}
                     onClick={() => fetchData(pagination.page + 1)}
                   >
                     <ChevronRight className="h-4 w-4" />
