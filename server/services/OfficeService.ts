@@ -2,16 +2,25 @@ import prisma from '../lib/prisma';
 import { NotFoundError, ConflictError } from '../lib/errors';
 import { AuditService } from './AuditService';
 import { Request } from 'express';
+import { FALLBACK_OFFICES } from '../lib/fallbackStore';
 
 export class OfficeService {
   public static async getOffices(activeOnly: boolean = false) {
-    const where: any = {};
-    if (activeOnly) where.isActive = true;
+    try {
+      const where: any = {};
+      if (activeOnly) where.isActive = true;
 
-    return prisma.office.findMany({
-      where,
-      orderBy: { code: 'asc' },
-    });
+      return await prisma.office.findMany({
+        where,
+        orderBy: { code: 'asc' },
+      });
+    } catch (err) {
+      console.warn('OfficeService.getOffices fallback:', err);
+      if (activeOnly) {
+        return FALLBACK_OFFICES.filter((o) => o.isActive);
+      }
+      return FALLBACK_OFFICES;
+    }
   }
 
   public static async getOfficeById(id: string) {

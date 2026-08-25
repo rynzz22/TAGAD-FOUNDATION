@@ -3,11 +3,20 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { PublicLayout } from '../../components/layout/PublicLayout';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { ProtectedRoute } from '../../modules/auth/ProtectedRoute';
-import { LandingPage } from '../../pages/public/LandingPage';
-import { LoginPage } from '../../pages/auth/LoginPage';
-import { DashboardPage } from '../../pages/dashboard/DashboardPage';
 
-// Domain Feature Pages
+// Public Citizen Portal Views (Sprint 3)
+import { LandingPage } from '../../pages/public/LandingPage';
+import { PublicDemographics } from '../../pages/public/PublicDemographics';
+import { PublicPrograms } from '../../pages/public/PublicPrograms';
+import { PublicAccomplishments } from '../../pages/public/PublicAccomplishments';
+import { PublicGADPlans } from '../../pages/public/PublicGADPlans';
+import { PublicFeedback } from '../../pages/public/PublicFeedback';
+
+// Authentication Portal
+import { LoginPage } from '../../pages/auth/LoginPage';
+
+// Authenticated GAD Workspace Pages (Protected)
+import { DashboardPage } from '../../pages/dashboard/DashboardPage';
 import ProgramMonitoring from '../../pages/ProgramMonitoring';
 import GADPlan from '../../pages/GADPlan';
 import Accomplishments from '../../pages/Accomplishments';
@@ -19,9 +28,14 @@ export const AppRouter: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Citizen Portal */}
+        {/* Public Citizen Portal (Unauthenticated) */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/demographics" element={<PublicDemographics />} />
+          <Route path="/public-programs" element={<PublicPrograms />} />
+          <Route path="/public-accomplishments" element={<PublicAccomplishments />} />
+          <Route path="/public-plans" element={<PublicGADPlans />} />
+          <Route path="/feedback" element={<PublicFeedback />} />
         </Route>
 
         {/* Authentication Portal */}

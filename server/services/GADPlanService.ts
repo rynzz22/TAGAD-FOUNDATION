@@ -3,6 +3,7 @@ import { GADPlanStatus, Role } from '@prisma/client';
 import { NotFoundError, OfficeScopeError, ForbiddenError } from '../lib/errors';
 import { AuditService } from './AuditService';
 import { Request } from 'express';
+import { FALLBACK_GAD_PLANS } from '../lib/fallbackStore';
 
 export class GADPlanService {
   public static async getGADPlans(
@@ -511,51 +512,63 @@ export class GADPlanService {
    * Public GAD Plan query: Returns only APPROVED plans with public line items
    */
   public static async getPublicGADPlans(params?: { year?: number; officeId?: string }) {
-    const where: any = {
-      status: GADPlanStatus.APPROVED,
-    };
+    try {
+      const where: any = {
+        status: GADPlanStatus.APPROVED,
+      };
 
-    if (params?.year) {
-      where.fiscalYear = Number(params.year);
-    }
-    if (params?.officeId) {
-      where.officeId = params.officeId;
-    }
+      if (params?.year) {
+        where.fiscalYear = Number(params.year);
+      }
+      if (params?.officeId) {
+        where.officeId = params.officeId;
+      }
 
-    const plans = await prisma.gADPlan.findMany({
-      where,
-      include: {
-        office: { select: { code: true, name: true } },
-        items: {
-          select: {
-            id: true,
-            genderIssue: true,
-            gadResult: true,
-            activity: true,
-            performanceIndicator: true,
-            targetGroup: true,
-            timeline: true,
-            responsibleOffice: true,
-            budget: true,
-            fundSource: true,
+      const plans = await prisma.gADPlan.findMany({
+        where,
+        include: {
+          office: { select: { code: true, name: true } },
+          items: {
+            select: {
+              id: true,
+              genderIssue: true,
+              gadResult: true,
+              activity: true,
+              performanceIndicator: true,
+              targetGroup: true,
+              timeline: true,
+              responsibleOffice: true,
+              budget: true,
+              fundSource: true,
+            },
           },
         },
-      },
-      orderBy: [{ fiscalYear: 'desc' }],
-    });
+        orderBy: [{ fiscalYear: 'desc' }],
+      });
 
-    return plans.map((p) => ({
-      id: p.id,
-      fiscalYear: p.fiscalYear,
-      office: p.office.code || p.office.name,
-      officeName: p.office.name,
-      totalBudget: Number(p.totalBudget),
-      gadBudget: Number(p.gadBudget),
-      status: p.status,
-      items: p.items.map((item) => ({
-        ...item,
-        budget: Number(item.budget),
-      })),
-    }));
+      return plans.map((p) => ({
+        id: p.id,
+        fiscalYear: p.fiscalYear,
+        office: p.office.code || p.office.name,
+        officeName: p.office.name,
+        totalBudget: Number(p.totalBudget),
+        gadBudget: Number(p.gadBudget),
+        status: p.status,
+        items: p.items.map((item) => ({
+          ...item,
+          budget: Number(item.budget),
+        })),
+      }));
+    } catch (err) {
+      console.warn('GADPlanService.getPublicGADPlans fallback:', err);
+      let list = FALLBACK_GAD_PLANS;
+      if (params?.year) {
+        list = list.filter((p) => p.fiscalYear === Number(params.year));
+      }
+      if (params?.officeId) {
+        list = list.filter((p) => p.officeId === params.officeId || p.office.toLowerCase() === params.officeId.toLowerCase());
+      }
+      return list;
+    }
   }
 }

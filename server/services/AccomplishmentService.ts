@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 import { NotFoundError, OfficeScopeError } from '../lib/errors';
 import { AuditService } from './AuditService';
 import { Request } from 'express';
+import { FALLBACK_ACCOMPLISHMENTS } from '../lib/fallbackStore';
 
 export class AccomplishmentService {
   public static async getAccomplishments(
@@ -265,52 +266,64 @@ export class AccomplishmentService {
    * Public accomplishment feed with zero PII
    */
   public static async getPublicAccomplishments(params?: { year?: number; quarter?: number }) {
-    const where: any = {};
-    if (params?.year) where.fiscalYear = Number(params.year);
-    if (params?.quarter) where.quarter = Number(params.quarter);
+    try {
+      const where: any = {};
+      if (params?.year) where.fiscalYear = Number(params.year);
+      if (params?.quarter) where.quarter = Number(params.quarter);
 
-    const accomplishments = await prisma.gADAccomplishment.findMany({
-      where,
-      select: {
-        id: true,
-        fiscalYear: true,
-        quarter: true,
-        actualOutput: true,
-        actualMale: true,
-        actualFemale: true,
-        actualBudgetUsed: true,
-        outputSummary: true,
-        program: {
-          select: {
-            id: true,
-            title: true,
-            sector: true,
-            office: { select: { code: true, name: true } },
+      const accomplishments = await prisma.gADAccomplishment.findMany({
+        where,
+        select: {
+          id: true,
+          fiscalYear: true,
+          quarter: true,
+          actualOutput: true,
+          actualMale: true,
+          actualFemale: true,
+          actualBudgetUsed: true,
+          outputSummary: true,
+          program: {
+            select: {
+              id: true,
+              title: true,
+              sector: true,
+              office: { select: { code: true, name: true } },
+            },
+          },
+          gadPlanItem: {
+            select: {
+              id: true,
+              activity: true,
+              responsibleOffice: true,
+            },
           },
         },
-        gadPlanItem: {
-          select: {
-            id: true,
-            activity: true,
-            responsibleOffice: true,
-          },
-        },
-      },
-      orderBy: [{ fiscalYear: 'desc' }, { quarter: 'desc' }],
-    });
+        orderBy: [{ fiscalYear: 'desc' }, { quarter: 'desc' }],
+      });
 
-    return accomplishments.map((a) => ({
-      id: a.id,
-      fiscalYear: a.fiscalYear,
-      quarter: a.quarter,
-      activityTitle: a.gadPlanItem?.activity || a.program?.title || 'GAD Project Activity',
-      office: a.program?.office?.name || a.gadPlanItem?.responsibleOffice || 'LGU Talibon',
-      actualOutput: a.actualOutput,
-      actualBudgetUsed: Number(a.actualBudgetUsed),
-      actualMale: a.actualMale,
-      actualFemale: a.actualFemale,
-      totalBeneficiaries: a.actualMale + a.actualFemale,
-      outputSummary: a.outputSummary,
-    }));
+      return accomplishments.map((a) => ({
+        id: a.id,
+        fiscalYear: a.fiscalYear,
+        quarter: a.quarter,
+        activityTitle: a.gadPlanItem?.activity || a.program?.title || 'GAD Project Activity',
+        office: a.program?.office?.name || a.gadPlanItem?.responsibleOffice || 'LGU Talibon',
+        actualOutput: a.actualOutput,
+        actualBudgetUsed: Number(a.actualBudgetUsed),
+        actualMale: a.actualMale,
+        actualFemale: a.actualFemale,
+        totalBeneficiaries: a.actualMale + a.actualFemale,
+        outputSummary: a.outputSummary,
+      }));
+    } catch (err) {
+      console.warn('AccomplishmentService.getPublicAccomplishments fallback:', err);
+      let list = FALLBACK_ACCOMPLISHMENTS;
+      if (params?.year) {
+        list = list.filter((a) => a.fiscalYear === Number(params.year));
+      }
+      if (params?.quarter) {
+        list = list.filter((a) => a.quarter === Number(params.quarter));
+      }
+      return list;
+    }
   }
 }

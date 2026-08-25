@@ -3,6 +3,7 @@ import { ProgramStatus, Role } from '@prisma/client';
 import { NotFoundError, OfficeScopeError } from '../lib/errors';
 import { AuditService } from './AuditService';
 import { Request } from 'express';
+import { FALLBACK_PROGRAMS } from '../lib/fallbackStore';
 
 export class ProgramService {
   public static async getPrograms(
@@ -256,52 +257,64 @@ export class ProgramService {
    * Public Program listing (only Active/Completed, sanitized)
    */
   public static async getPublicPrograms(params?: { year?: number; sector?: string }) {
-    const where: any = {
-      status: { in: [ProgramStatus.ACTIVE, ProgramStatus.COMPLETED] },
-    };
+    try {
+      const where: any = {
+        status: { in: [ProgramStatus.ACTIVE, ProgramStatus.COMPLETED] },
+      };
 
-    if (params?.year) {
-      where.fiscalYear = Number(params.year);
+      if (params?.year) {
+        where.fiscalYear = Number(params.year);
+      }
+      if (params?.sector) {
+        where.sector = params.sector;
+      }
+
+      const programs = await prisma.program.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          sector: true,
+          fiscalYear: true,
+          status: true,
+          budgetTarget: true,
+          budgetActual: true,
+          targetMale: true,
+          targetFemale: true,
+          actualMale: true,
+          actualFemale: true,
+          office: { select: { code: true, name: true } },
+        },
+        orderBy: [{ fiscalYear: 'desc' }, { title: 'asc' }],
+      });
+
+      return programs.map((p) => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        sector: p.sector,
+        fiscalYear: p.fiscalYear,
+        status: p.status,
+        budgetTarget: Number(p.budgetTarget),
+        budgetActual: Number(p.budgetActual),
+        targetMale: p.targetMale,
+        targetFemale: p.targetFemale,
+        actualMale: p.actualMale,
+        actualFemale: p.actualFemale,
+        office: p.office.code || p.office.name,
+        officeName: p.office.name,
+      }));
+    } catch (err) {
+      console.warn('ProgramService.getPublicPrograms fallback:', err);
+      let list = FALLBACK_PROGRAMS.filter((p) => p.status === 'ACTIVE' || p.status === 'COMPLETED');
+      if (params?.year) {
+        list = list.filter((p) => p.fiscalYear === Number(params.year));
+      }
+      if (params?.sector) {
+        list = list.filter((p) => p.sector.toLowerCase() === params.sector?.toLowerCase());
+      }
+      return list;
     }
-    if (params?.sector) {
-      where.sector = params.sector;
-    }
-
-    const programs = await prisma.program.findMany({
-      where,
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        sector: true,
-        fiscalYear: true,
-        status: true,
-        budgetTarget: true,
-        budgetActual: true,
-        targetMale: true,
-        targetFemale: true,
-        actualMale: true,
-        actualFemale: true,
-        office: { select: { code: true, name: true } },
-      },
-      orderBy: [{ fiscalYear: 'desc' }, { title: 'asc' }],
-    });
-
-    return programs.map((p) => ({
-      id: p.id,
-      title: p.title,
-      description: p.description,
-      sector: p.sector,
-      fiscalYear: p.fiscalYear,
-      status: p.status,
-      budgetTarget: Number(p.budgetTarget),
-      budgetActual: Number(p.budgetActual),
-      targetMale: p.targetMale,
-      targetFemale: p.targetFemale,
-      actualMale: p.actualMale,
-      actualFemale: p.actualFemale,
-      office: p.office.code || p.office.name,
-      officeName: p.office.name,
-    }));
   }
 }

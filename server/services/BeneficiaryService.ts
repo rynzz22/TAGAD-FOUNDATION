@@ -3,6 +3,7 @@ import { Sex, Role } from '@prisma/client';
 import { NotFoundError, OfficeScopeError, ForbiddenError } from '../lib/errors';
 import { AuditService } from './AuditService';
 import { Request } from 'express';
+import { getFallbackDemographicsData } from '../lib/fallbackStore';
 
 export class BeneficiaryService {
   public static async getBeneficiaries(
@@ -301,74 +302,79 @@ export class BeneficiaryService {
    * Strictly aggregated demographic metrics for public consumption with ZERO PII
    */
   public static async getDemographicsAggregates(params?: { year?: number; barangayId?: string }) {
-    const where: any = { isArchived: false };
+    try {
+      const where: any = { isArchived: false };
 
-    if (params?.year) {
-      const yearStart = new Date(`${params.year}-01-01`);
-      const yearEnd = new Date(`${params.year}-12-31T23:59:59.999Z`);
-      where.createdAt = { gte: yearStart, lte: yearEnd };
-    }
-
-    if (params?.barangayId) {
-      where.barangayId = params.barangayId;
-    }
-
-    const [totalBeneficiaries, maleCount, femaleCount, bySectorData, byBarangayData, barangays] =
-      await Promise.all([
-        prisma.beneficiary.count({ where }),
-        prisma.beneficiary.count({ where: { ...where, sex: Sex.MALE } }),
-        prisma.beneficiary.count({ where: { ...where, sex: Sex.FEMALE } }),
-        prisma.beneficiary.groupBy({
-          by: ['sector'],
-          where,
-          _count: { id: true },
-        }),
-        prisma.beneficiary.groupBy({
-          by: ['barangayId', 'sex'],
-          where,
-          _count: { id: true },
-        }),
-        prisma.barangay.findMany({ select: { id: true, name: true } }),
-      ]);
-
-    const brgyMap = new Map(barangays.map((b) => [b.id, b.name]));
-    const byBarangayMap: Record<string, { barangay: string; male: number; female: number; total: number }> = {};
-
-    barangays.forEach((b) => {
-      byBarangayMap[b.id] = { barangay: b.name, male: 0, female: 0, total: 0 };
-    });
-
-    byBarangayData.forEach((item) => {
-      if (!byBarangayMap[item.barangayId]) {
-        byBarangayMap[item.barangayId] = {
-          barangay: brgyMap.get(item.barangayId) || 'Unknown',
-          male: 0,
-          female: 0,
-          total: 0,
-        };
+      if (params?.year) {
+        const yearStart = new Date(`${params.year}-01-01`);
+        const yearEnd = new Date(`${params.year}-12-31T23:59:59.999Z`);
+        where.createdAt = { gte: yearStart, lte: yearEnd };
       }
-      if (item.sex === Sex.MALE) {
-        byBarangayMap[item.barangayId].male += item._count.id;
-      } else {
-        byBarangayMap[item.barangayId].female += item._count.id;
-      }
-      byBarangayMap[item.barangayId].total += item._count.id;
-    });
 
-    return {
-      totals: {
-        totalBeneficiaries,
-        male: maleCount,
-        female: femaleCount,
-        femalePercentage: totalBeneficiaries > 0 ? (femaleCount / totalBeneficiaries) * 100 : 0,
-        malePercentage: totalBeneficiaries > 0 ? (maleCount / totalBeneficiaries) * 100 : 0,
-      },
-      bySector: bySectorData.map((s) => ({
-        sector: s.sector,
-        count: s._count.id,
-        percentage: totalBeneficiaries > 0 ? (s._count.id / totalBeneficiaries) * 100 : 0,
-      })),
-      byBarangay: Object.values(byBarangayMap),
-    };
+      if (params?.barangayId) {
+        where.barangayId = params.barangayId;
+      }
+
+      const [totalBeneficiaries, maleCount, femaleCount, bySectorData, byBarangayData, barangays] =
+        await Promise.all([
+          prisma.beneficiary.count({ where }),
+          prisma.beneficiary.count({ where: { ...where, sex: Sex.MALE } }),
+          prisma.beneficiary.count({ where: { ...where, sex: Sex.FEMALE } }),
+          prisma.beneficiary.groupBy({
+            by: ['sector'],
+            where,
+            _count: { id: true },
+          }),
+          prisma.beneficiary.groupBy({
+            by: ['barangayId', 'sex'],
+            where,
+            _count: { id: true },
+          }),
+          prisma.barangay.findMany({ select: { id: true, name: true } }),
+        ]);
+
+      const brgyMap = new Map(barangays.map((b) => [b.id, b.name]));
+      const byBarangayMap: Record<string, { barangay: string; male: number; female: number; total: number }> = {};
+
+      barangays.forEach((b) => {
+        byBarangayMap[b.id] = { barangay: b.name, male: 0, female: 0, total: 0 };
+      });
+
+      byBarangayData.forEach((item) => {
+        if (!byBarangayMap[item.barangayId]) {
+          byBarangayMap[item.barangayId] = {
+            barangay: brgyMap.get(item.barangayId) || 'Unknown',
+            male: 0,
+            female: 0,
+            total: 0,
+          };
+        }
+        if (item.sex === Sex.MALE) {
+          byBarangayMap[item.barangayId].male += item._count.id;
+        } else {
+          byBarangayMap[item.barangayId].female += item._count.id;
+        }
+        byBarangayMap[item.barangayId].total += item._count.id;
+      });
+
+      return {
+        totals: {
+          totalBeneficiaries,
+          male: maleCount,
+          female: femaleCount,
+          femalePercentage: totalBeneficiaries > 0 ? (femaleCount / totalBeneficiaries) * 100 : 0,
+          malePercentage: totalBeneficiaries > 0 ? (maleCount / totalBeneficiaries) * 100 : 0,
+        },
+        bySector: bySectorData.map((s) => ({
+          sector: s.sector,
+          count: s._count.id,
+          percentage: totalBeneficiaries > 0 ? (s._count.id / totalBeneficiaries) * 100 : 0,
+        })),
+        byBarangay: Object.values(byBarangayMap),
+      };
+    } catch (err) {
+      console.warn('BeneficiaryService.getDemographicsAggregates fallback:', err);
+      return getFallbackDemographicsData(params?.year, params?.barangayId);
+    }
   }
 }
