@@ -1,4 +1,4 @@
-import prisma from '../lib/prisma';
+import prisma, { isDatabaseConnected } from '../lib/prisma';
 import { Sex, Role } from '@prisma/client';
 import { NotFoundError, OfficeScopeError, ForbiddenError } from '../lib/errors';
 import { AuditService } from './AuditService';
@@ -153,42 +153,46 @@ export class BeneficiaryService {
       resolvedBarangayId = defaultBrgy?.id;
     }
 
-    const beneficiary = await prisma.beneficiary.create({
-      data: {
-        firstName: data.firstName.trim(),
-        lastName: data.lastName.trim(),
-        middleName: data.middleName ? data.middleName.trim() : null,
-        sex: (data.sex?.toUpperCase() as Sex) || Sex.FEMALE,
-        age: parseInt(String(data.age || '0'), 10),
-        sector: data.sector || 'General',
-        barangayId: resolvedBarangayId!,
-        officeId: effectiveOfficeId || null,
-        householdId: data.householdId || null,
-        contactNumber: data.contactNumber || null,
-        addressStreet: data.addressStreet || null,
-        birthdate: data.birthdate ? new Date(data.birthdate) : null,
-        encodedById: actorUser.id,
-      },
-      include: {
-        barangay: true,
-        office: true,
-      },
-    });
+    const beneficiary = await prisma.$transaction(async (tx) => {
+      const created = await tx.beneficiary.create({
+        data: {
+          firstName: data.firstName.trim(),
+          lastName: data.lastName.trim(),
+          middleName: data.middleName ? data.middleName.trim() : null,
+          sex: (data.sex?.toUpperCase() as Sex) || Sex.FEMALE,
+          age: parseInt(String(data.age || '0'), 10),
+          sector: data.sector || 'General',
+          barangayId: resolvedBarangayId!,
+          officeId: effectiveOfficeId || null,
+          householdId: data.householdId || null,
+          contactNumber: data.contactNumber || null,
+          addressStreet: data.addressStreet || null,
+          birthdate: data.birthdate ? new Date(data.birthdate) : null,
+          encodedById: actorUser.id,
+        },
+        include: {
+          barangay: true,
+          office: true,
+        },
+      });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'BENEFICIARY_CREATED',
-      entityType: 'Beneficiary',
-      entityId: beneficiary.id,
-      afterState: {
-        id: beneficiary.id,
-        sex: beneficiary.sex,
-        age: beneficiary.age,
-        sector: beneficiary.sector,
-        barangayId: beneficiary.barangayId,
-        officeId: beneficiary.officeId,
-      },
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'BENEFICIARY_CREATED',
+        entityType: 'Beneficiary',
+        entityId: created.id,
+        afterState: {
+          id: created.id,
+          sex: created.sex,
+          age: created.age,
+          sector: created.sector,
+          barangayId: created.barangayId,
+          officeId: created.officeId,
+        },
+        req,
+      });
+
+      return created;
     });
 
     return {
@@ -244,20 +248,24 @@ export class BeneficiaryService {
       updateData.officeId = data.officeId;
     }
 
-    const updated = await prisma.beneficiary.update({
-      where: { id },
-      data: updateData,
-      include: { barangay: true, office: true },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const ben = await tx.beneficiary.update({
+        where: { id },
+        data: updateData,
+        include: { barangay: true, office: true },
+      });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'BENEFICIARY_UPDATED',
-      entityType: 'Beneficiary',
-      entityId: updated.id,
-      beforeState: { id: existing.id, sex: existing.sex, sector: existing.sector },
-      afterState: { id: updated.id, sex: updated.sex, sector: updated.sector },
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'BENEFICIARY_UPDATED',
+        entityType: 'Beneficiary',
+        entityId: ben.id,
+        beforeState: { id: existing.id, sex: existing.sex, sector: existing.sector },
+        afterState: { id: ben.id, sex: ben.sex, sector: ben.sector },
+        req,
+      });
+
+      return ben;
     });
 
     return {
@@ -282,17 +290,19 @@ export class BeneficiaryService {
       throw new OfficeScopeError('Encoders cannot archive beneficiaries under other offices');
     }
 
-    await prisma.beneficiary.update({
-      where: { id },
-      data: { isArchived: true },
-    });
+    await prisma.$transaction(async (tx) => {
+      await tx.beneficiary.update({
+        where: { id },
+        data: { isArchived: true },
+      });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'BENEFICIARY_ARCHIVED',
-      entityType: 'Beneficiary',
-      entityId: id,
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'BENEFICIARY_ARCHIVED',
+        entityType: 'Beneficiary',
+        entityId: id,
+        req,
+      });
     });
 
     return { message: 'Beneficiary record archived successfully' };
@@ -302,6 +312,10 @@ export class BeneficiaryService {
    * Strictly aggregated demographic metrics for public consumption with ZERO PII
    */
   public static async getDemographicsAggregates(params?: { year?: number; barangayId?: string }) {
+    if (!isDatabaseConnected()) {
+      return getFallbackDemographicsData(params?.year, params?.barangayId);
+    }
+
     try {
       const where: any = { isArchived: false };
 
@@ -372,8 +386,7 @@ export class BeneficiaryService {
         })),
         byBarangay: Object.values(byBarangayMap),
       };
-    } catch (err) {
-      console.warn('BeneficiaryService.getDemographicsAggregates fallback:', err);
+    } catch {
       return getFallbackDemographicsData(params?.year, params?.barangayId);
     }
   }

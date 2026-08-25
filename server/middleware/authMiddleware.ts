@@ -64,6 +64,9 @@ export const requireAuth = async (
 
     next();
   } catch (err: any) {
+    if (err?.name === 'TokenRevokedError') {
+      return sendError(res, new UnauthorizedError('Authentication token has been revoked or invalidated', 'TOKEN_REVOKED'));
+    }
     if (err?.name === 'TokenExpiredError') {
       return sendError(res, new UnauthorizedError('Authentication token expired', 'TOKEN_EXPIRED'));
     }

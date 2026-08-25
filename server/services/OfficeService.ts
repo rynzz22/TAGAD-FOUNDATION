@@ -1,4 +1,4 @@
-import prisma from '../lib/prisma';
+import prisma, { isDatabaseConnected } from '../lib/prisma';
 import { NotFoundError, ConflictError } from '../lib/errors';
 import { AuditService } from './AuditService';
 import { Request } from 'express';
@@ -6,6 +6,13 @@ import { FALLBACK_OFFICES } from '../lib/fallbackStore';
 
 export class OfficeService {
   public static async getOffices(activeOnly: boolean = false) {
+    if (!isDatabaseConnected()) {
+      if (activeOnly) {
+        return FALLBACK_OFFICES.filter((o) => o.isActive);
+      }
+      return FALLBACK_OFFICES;
+    }
+
     try {
       const where: any = {};
       if (activeOnly) where.isActive = true;
@@ -14,8 +21,7 @@ export class OfficeService {
         where,
         orderBy: { code: 'asc' },
       });
-    } catch (err) {
-      console.warn('OfficeService.getOffices fallback:', err);
+    } catch {
       if (activeOnly) {
         return FALLBACK_OFFICES.filter((o) => o.isActive);
       }
@@ -24,18 +30,41 @@ export class OfficeService {
   }
 
   public static async getOfficeById(id: string) {
-    const office = await prisma.office.findUnique({
-      where: { id },
-      include: {
-        users: { select: { id: true, fullName: true, role: true, email: true } },
-      },
-    });
-
-    if (!office) {
+    if (!isDatabaseConnected()) {
+      const office = FALLBACK_OFFICES.find((o) => o.id === id || o.code.toLowerCase() === id.toLowerCase());
+      if (office) {
+        return {
+          ...office,
+          users: [],
+        };
+      }
       throw new NotFoundError('Office');
     }
 
-    return office;
+    try {
+      const office = await prisma.office.findUnique({
+        where: { id },
+        include: {
+          users: { select: { id: true, fullName: true, role: true, email: true } },
+        },
+      });
+
+      if (!office) {
+        throw new NotFoundError('Office');
+      }
+
+      return office;
+    } catch (err: any) {
+      if (err instanceof NotFoundError) throw err;
+      const office = FALLBACK_OFFICES.find((o) => o.id === id || o.code.toLowerCase() === id.toLowerCase());
+      if (office) {
+        return {
+          ...office,
+          users: [],
+        };
+      }
+      throw new NotFoundError('Office');
+    }
   }
 
   public static async createOffice(data: any, actorUserId?: string, req?: Request) {

@@ -32,10 +32,11 @@ export const sendError = (
   statusCode: number = 500
 ): Response => {
   if (error instanceof AppError) {
+    const code = error.code || 'APP_ERROR';
     return res.status(error.statusCode).json({
       success: false,
       error: {
-        code: error.code,
+        code,
         message: error.message,
         ...(error.details ? { details: error.details } : {}),
       },
@@ -43,7 +44,7 @@ export const sendError = (
   }
 
   const message = typeof error === 'string' ? error : error.message || 'Internal server error';
-  const code = (error as any)?.code || 'INTERNAL_SERVER_ERROR';
+  const code = (error as any)?.code || (error as any)?.errorCode || 'INTERNAL_SERVER_ERROR';
 
   return res.status(statusCode).json({
     success: false,

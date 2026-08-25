@@ -1,6 +1,12 @@
 import bcrypt from 'bcryptjs';
-import prisma from '../lib/prisma';
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt';
+import prisma, { isDatabaseConnected } from '../lib/prisma';
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken,
+  revokeToken,
+  invalidateSession,
+} from '../lib/jwt';
 import { UnauthorizedError, NotFoundError } from '../lib/errors';
 import { AuditService } from './AuditService';
 import { Request } from 'express';
@@ -48,65 +54,66 @@ export class AuthService {
   public static async login(email: string, passwordPlain: string, req?: Request) {
     const cleanEmail = email.toLowerCase().trim();
 
-    try {
-      const user = await prisma.user.findUnique({
-        where: { email: cleanEmail },
-        include: {
-          office: { select: { id: true, code: true, name: true } },
-          barangay: { select: { id: true, code: true, name: true } },
-        },
-      });
-
-      if (user) {
-        const isMatch = await bcrypt.compare(passwordPlain, user.passwordHash);
-        if (!isMatch) {
-          throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-        }
-
-        if (!user.isActive) {
-          throw new UnauthorizedError('Account has been deactivated. Please contact the administrator.', 'ACCOUNT_INACTIVE');
-        }
-
-        const tokenPayload = {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          officeId: user.officeId,
-          barangayId: user.barangayId,
-        };
-
-        const accessToken = signAccessToken(tokenPayload);
-        const refreshToken = signRefreshToken(tokenPayload);
-
-        await AuditService.logAction({
-          userId: user.id,
-          action: 'USER_LOGIN',
-          entityType: 'User',
-          entityId: user.id,
-          req,
+    if (isDatabaseConnected()) {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { email: cleanEmail },
+          include: {
+            office: { select: { id: true, code: true, name: true } },
+            barangay: { select: { id: true, code: true, name: true } },
+          },
         });
 
-        return {
-          token: accessToken,
-          accessToken,
-          refreshToken,
-          user: {
+        if (user) {
+          const isMatch = await bcrypt.compare(passwordPlain, user.passwordHash);
+          if (!isMatch) {
+            throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+          }
+
+          if (!user.isActive) {
+            throw new UnauthorizedError('Account has been deactivated. Please contact the administrator.', 'ACCOUNT_INACTIVE');
+          }
+
+          const tokenPayload = {
             id: user.id,
             email: user.email,
-            name: user.fullName,
-            fullName: user.fullName,
             role: user.role,
             officeId: user.officeId,
-            office: user.office?.code || user.office?.name || '',
-            officeDetails: user.office,
             barangayId: user.barangayId,
-            barangayDetails: user.barangay,
-          },
-        };
+          };
+
+          const accessToken = signAccessToken(tokenPayload);
+          const refreshToken = signRefreshToken(tokenPayload);
+
+          await AuditService.logAction({
+            userId: user.id,
+            action: 'USER_LOGIN',
+            entityType: 'User',
+            entityId: user.id,
+            req,
+          });
+
+          return {
+            token: accessToken,
+            accessToken,
+            refreshToken,
+            user: {
+              id: user.id,
+              email: user.email,
+              name: user.fullName,
+              fullName: user.fullName,
+              role: user.role,
+              officeId: user.officeId,
+              office: user.office?.code || user.office?.name || '',
+              officeDetails: user.office,
+              barangayId: user.barangayId,
+              barangayDetails: user.barangay,
+            },
+          };
+        }
+      } catch (err: any) {
+        if (err instanceof UnauthorizedError) throw err;
       }
-    } catch (err: any) {
-      if (err instanceof UnauthorizedError) throw err;
-      console.warn('AuthService.login database lookup fallback:', err);
     }
 
     // Fallback demo authentication
@@ -148,14 +155,23 @@ export class AuthService {
   public static async refreshToken(token: string) {
     try {
       const decoded = verifyRefreshToken(token);
+
+      // Invalidate the old refresh token immediately (rotation & single-use guarantee)
+      if (decoded.jti) {
+        revokeToken(decoded.jti);
+      }
+      revokeToken(token);
+
       let user: any = null;
 
-      try {
-        user = await prisma.user.findUnique({
-          where: { id: decoded.id },
-        });
-      } catch (e) {
-        user = DEMO_USERS.find((u) => u.id === decoded.id);
+      if (isDatabaseConnected()) {
+        try {
+          user = await prisma.user.findUnique({
+            where: { id: decoded.id },
+          });
+        } catch {
+          user = DEMO_USERS.find((u) => u.id === decoded.id);
+        }
       }
 
       if (!user && DEMO_USERS.find((u) => u.id === decoded.id)) {
@@ -181,39 +197,42 @@ export class AuthService {
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
       };
-    } catch (err) {
-      throw new UnauthorizedError('Invalid or expired refresh token', 'INVALID_REFRESH_TOKEN');
+    } catch (err: any) {
+      if (err instanceof UnauthorizedError) throw err;
+      throw new UnauthorizedError('Invalid, expired, or already rotated refresh token', 'INVALID_REFRESH_TOKEN');
     }
   }
 
   public static async getMe(userId: string) {
-    try {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        include: {
-          office: true,
-          barangay: true,
-        },
-      });
+    if (isDatabaseConnected()) {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          include: {
+            office: true,
+            barangay: true,
+          },
+        });
 
-      if (user) {
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.fullName,
-          fullName: user.fullName,
-          role: user.role,
-          officeId: user.officeId,
-          office: user.office?.code || user.office?.name || '',
-          officeDetails: user.office,
-          barangayId: user.barangayId,
-          barangayDetails: user.barangay,
-          isActive: user.isActive,
-          createdAt: user.createdAt,
-        };
+        if (user) {
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.fullName,
+            fullName: user.fullName,
+            role: user.role,
+            officeId: user.officeId,
+            office: user.office?.code || user.office?.name || '',
+            officeDetails: user.office,
+            barangayId: user.barangayId,
+            barangayDetails: user.barangay,
+            isActive: user.isActive,
+            createdAt: user.createdAt,
+          };
+        }
+      } catch {
+        // Fallback to demo user below
       }
-    } catch (e) {
-      console.warn('AuthService.getMe database fallback:', e);
     }
 
     const demo = DEMO_USERS.find((u) => u.id === userId);
@@ -237,7 +256,23 @@ export class AuthService {
     throw new NotFoundError('User profile');
   }
 
-  public static async logout(userId?: string, req?: Request) {
+  public static async logout(userId?: string, req?: Request, tokenToRevoke?: string) {
+    // Invalidate request access token if present
+    const authHeader = req?.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      revokeToken(token);
+    }
+
+    if (tokenToRevoke) {
+      revokeToken(tokenToRevoke);
+    }
+
+    // Invalidate body refresh token if supplied
+    if (req?.body?.refreshToken) {
+      revokeToken(req.body.refreshToken);
+    }
+
     if (userId) {
       await AuditService.logAction({
         userId,

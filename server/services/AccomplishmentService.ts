@@ -1,4 +1,4 @@
-import prisma from '../lib/prisma';
+import prisma, { isDatabaseConnected } from '../lib/prisma';
 import { Role } from '@prisma/client';
 import { NotFoundError, OfficeScopeError } from '../lib/errors';
 import { AuditService } from './AuditService';
@@ -116,35 +116,39 @@ export class AccomplishmentService {
       }
     }
 
-    const acc = await prisma.gADAccomplishment.create({
-      data: {
-        gadPlanItemId: targetPlanItemId,
-        programId: targetProgramId,
-        fiscalYear: parseInt(String(data.fiscalYear || data.year || new Date().getFullYear()), 10),
-        quarter: data.quarter ? parseInt(String(data.quarter), 10) : 1,
-        actualOutput: data.actualOutput.trim(),
-        actualMale: parseInt(String(data.actualMale || data.actualBeneficiaryMale || '0'), 10),
-        actualFemale: parseInt(String(data.actualFemale || data.actualBeneficiaryFemale || '0'), 10),
-        actualBudgetUsed: parseFloat(String(data.actualBudgetUsed || '0')),
-        outputSummary: data.outputSummary || null,
-        remarks: data.remarks || null,
-        varianceExplanation: data.varianceExplanation || null,
-        createdById: actorUser.id,
-      },
-      include: {
-        program: { include: { office: true } },
-        gadPlanItem: { include: { gadPlan: { include: { office: true } } } },
-        attachments: true,
-      },
-    });
+    const acc = await prisma.$transaction(async (tx) => {
+      const created = await tx.gADAccomplishment.create({
+        data: {
+          gadPlanItemId: targetPlanItemId,
+          programId: targetProgramId,
+          fiscalYear: parseInt(String(data.fiscalYear || data.year || new Date().getFullYear()), 10),
+          quarter: data.quarter ? parseInt(String(data.quarter), 10) : 1,
+          actualOutput: data.actualOutput.trim(),
+          actualMale: parseInt(String(data.actualMale || data.actualBeneficiaryMale || '0'), 10),
+          actualFemale: parseInt(String(data.actualFemale || data.actualBeneficiaryFemale || '0'), 10),
+          actualBudgetUsed: parseFloat(String(data.actualBudgetUsed || '0')),
+          outputSummary: data.outputSummary || null,
+          remarks: data.remarks || null,
+          varianceExplanation: data.varianceExplanation || null,
+          createdById: actorUser.id,
+        },
+        include: {
+          program: { include: { office: true } },
+          gadPlanItem: { include: { gadPlan: { include: { office: true } } } },
+          attachments: true,
+        },
+      });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'ACCOMPLISHMENT_CREATED',
-      entityType: 'GADAccomplishment',
-      entityId: acc.id,
-      afterState: { id: acc.id, actualOutput: acc.actualOutput, actualBudgetUsed: Number(acc.actualBudgetUsed) },
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'ACCOMPLISHMENT_CREATED',
+        entityType: 'GADAccomplishment',
+        entityId: created.id,
+        afterState: { id: created.id, actualOutput: created.actualOutput, actualBudgetUsed: Number(created.actualBudgetUsed) },
+        req,
+      });
+
+      return created;
     });
 
     return {
@@ -196,24 +200,28 @@ export class AccomplishmentService {
     if (data.varianceExplanation !== undefined) updateData.varianceExplanation = data.varianceExplanation;
     if (data.quarter !== undefined) updateData.quarter = parseInt(String(data.quarter), 10);
 
-    const updated = await prisma.gADAccomplishment.update({
-      where: { id },
-      data: updateData,
-      include: {
-        program: { include: { office: true } },
-        gadPlanItem: { include: { gadPlan: { include: { office: true } } } },
-        attachments: true,
-      },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.gADAccomplishment.update({
+        where: { id },
+        data: updateData,
+        include: {
+          program: { include: { office: true } },
+          gadPlanItem: { include: { gadPlan: { include: { office: true } } } },
+          attachments: true,
+        },
+      });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'ACCOMPLISHMENT_UPDATED',
-      entityType: 'GADAccomplishment',
-      entityId: id,
-      beforeState: { id: existing.id, actualOutput: existing.actualOutput },
-      afterState: { id: updated.id, actualOutput: updated.actualOutput },
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'ACCOMPLISHMENT_UPDATED',
+        entityType: 'GADAccomplishment',
+        entityId: id,
+        beforeState: { id: existing.id, actualOutput: existing.actualOutput },
+        afterState: { id: result.id, actualOutput: result.actualOutput },
+        req,
+      });
+
+      return result;
     });
 
     return {
@@ -248,15 +256,17 @@ export class AccomplishmentService {
       }
     }
 
-    await prisma.gADAccomplishment.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.gADAccomplishment.delete({ where: { id } });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'ACCOMPLISHMENT_DELETED',
-      entityType: 'GADAccomplishment',
-      entityId: id,
-      beforeState: existing,
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'ACCOMPLISHMENT_DELETED',
+        entityType: 'GADAccomplishment',
+        entityId: id,
+        beforeState: existing,
+        req,
+      });
     });
 
     return { message: 'Accomplishment record deleted' };
@@ -266,6 +276,17 @@ export class AccomplishmentService {
    * Public accomplishment feed with zero PII
    */
   public static async getPublicAccomplishments(params?: { year?: number; quarter?: number }) {
+    if (!isDatabaseConnected()) {
+      let list = FALLBACK_ACCOMPLISHMENTS;
+      if (params?.year) {
+        list = list.filter((a) => a.fiscalYear === Number(params.year));
+      }
+      if (params?.quarter) {
+        list = list.filter((a) => a.quarter === Number(params.quarter));
+      }
+      return list;
+    }
+
     try {
       const where: any = {};
       if (params?.year) where.fiscalYear = Number(params.year);
@@ -314,8 +335,7 @@ export class AccomplishmentService {
         totalBeneficiaries: a.actualMale + a.actualFemale,
         outputSummary: a.outputSummary,
       }));
-    } catch (err) {
-      console.warn('AccomplishmentService.getPublicAccomplishments fallback:', err);
+    } catch {
       let list = FALLBACK_ACCOMPLISHMENTS;
       if (params?.year) {
         list = list.filter((a) => a.fiscalYear === Number(params.year));

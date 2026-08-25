@@ -1,4 +1,4 @@
-import prisma from '../lib/prisma';
+import prisma, { isDatabaseConnected } from '../lib/prisma';
 import { GADPlanStatus, Role } from '@prisma/client';
 import { NotFoundError, OfficeScopeError, ForbiddenError } from '../lib/errors';
 import { AuditService } from './AuditService';
@@ -208,60 +208,63 @@ export class GADPlanService {
     const fYear = parseInt(String(data.fiscalYear || data.year || new Date().getFullYear()), 10);
     const itemBudget = parseFloat(String(data.budget || '0'));
 
-    // Find or create the annual GADPlan header
-    let plan = await prisma.gADPlan.findFirst({
-      where: { officeId: effectiveOfficeId!, fiscalYear: fYear },
-      include: { office: true },
-    });
+    // Create or update plan and item in transaction
+    const { plan, item } = await prisma.$transaction(async (tx) => {
+      let activePlan = await tx.gADPlan.findFirst({
+        where: { officeId: effectiveOfficeId!, fiscalYear: fYear },
+        include: { office: true },
+      });
 
-    if (!plan) {
-      plan = await prisma.gADPlan.create({
+      if (!activePlan) {
+        activePlan = await tx.gADPlan.create({
+          data: {
+            officeId: effectiveOfficeId!,
+            fiscalYear: fYear,
+            gadBudget: itemBudget,
+            totalBudget: data.totalBudget ? parseFloat(String(data.totalBudget)) : itemBudget * 20,
+            mandatoryGADPercentage: 5.0,
+            status: (data.status as GADPlanStatus) || GADPlanStatus.DRAFT,
+            createdById: actorUser.id,
+          },
+          include: { office: true },
+        });
+      } else if (itemBudget > 0) {
+        activePlan = await tx.gADPlan.update({
+          where: { id: activePlan.id },
+          data: { gadBudget: { increment: itemBudget } },
+          include: { office: true },
+        });
+      }
+
+      const createdItem = await tx.gADPlanItem.create({
         data: {
-          officeId: effectiveOfficeId!,
-          fiscalYear: fYear,
-          gadBudget: itemBudget,
-          totalBudget: data.totalBudget ? parseFloat(String(data.totalBudget)) : itemBudget * 20,
-          mandatoryGADPercentage: 5.0,
-          status: (data.status as GADPlanStatus) || GADPlanStatus.DRAFT,
-          createdById: actorUser.id,
+          gadPlanId: activePlan.id,
+          programId: data.programId || null,
+          genderIssue: data.genderIssue || 'Not Specified',
+          causeOfIssue: data.causeOfIssue || null,
+          gadResult: data.gadResult || 'Gender Equality Objective',
+          activity: data.activity || 'GAD Activity',
+          performanceIndicator: data.performanceIndicator || 'Target metrics accomplished',
+          targetGroup: data.targetGroup || 'General beneficiaries',
+          timeline: data.timeline || `FY ${fYear}`,
+          responsibleOffice: data.responsibleOffice || activePlan.office.code || activePlan.office.name,
+          budget: itemBudget,
+          fundSource: data.fundSource || 'General Fund (5% GAD)',
+          hgdgScore: data.hgdgScore ? parseFloat(String(data.hgdgScore)) : null,
+          attributedPercentage: data.attributedPercentage ? parseFloat(String(data.attributedPercentage)) : null,
         },
-        include: { office: true },
       });
-    } else if (itemBudget > 0) {
-      plan = await prisma.gADPlan.update({
-        where: { id: plan.id },
-        data: { gadBudget: { increment: itemBudget } },
-        include: { office: true },
+
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'GAD_PLAN_ITEM_CREATED',
+        entityType: 'GADPlanItem',
+        entityId: createdItem.id,
+        afterState: { id: createdItem.id, planId: activePlan.id, activity: createdItem.activity, budget: Number(createdItem.budget) },
+        req,
       });
-    }
 
-    // Create item
-    const item = await prisma.gADPlanItem.create({
-      data: {
-        gadPlanId: plan.id,
-        programId: data.programId || null,
-        genderIssue: data.genderIssue || 'Not Specified',
-        causeOfIssue: data.causeOfIssue || null,
-        gadResult: data.gadResult || 'Gender Equality Objective',
-        activity: data.activity || 'GAD Activity',
-        performanceIndicator: data.performanceIndicator || 'Target metrics accomplished',
-        targetGroup: data.targetGroup || 'General beneficiaries',
-        timeline: data.timeline || `FY ${fYear}`,
-        responsibleOffice: data.responsibleOffice || plan.office.code || plan.office.name,
-        budget: itemBudget,
-        fundSource: data.fundSource || 'General Fund (5% GAD)',
-        hgdgScore: data.hgdgScore ? parseFloat(String(data.hgdgScore)) : null,
-        attributedPercentage: data.attributedPercentage ? parseFloat(String(data.attributedPercentage)) : null,
-      },
-    });
-
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'GAD_PLAN_ITEM_CREATED',
-      entityType: 'GADPlanItem',
-      entityId: item.id,
-      afterState: { id: item.id, planId: plan.id, activity: item.activity, budget: Number(item.budget) },
-      req,
+      return { plan: activePlan, item: createdItem };
     });
 
     return {
@@ -320,27 +323,31 @@ export class GADPlanService {
         updateData.attributedPercentage = data.attributedPercentage ? parseFloat(String(data.attributedPercentage)) : null;
       }
 
-      const updated = await prisma.gADPlanItem.update({
-        where: { id },
-        data: updateData,
-        include: { gadPlan: { include: { office: true } } },
-      });
-
-      if (data.status && actorUser.role === Role.ADMIN) {
-        await prisma.gADPlan.update({
-          where: { id: updated.gadPlanId },
-          data: { status: data.status as GADPlanStatus },
+      const updated = await prisma.$transaction(async (tx) => {
+        const itemRes = await tx.gADPlanItem.update({
+          where: { id },
+          data: updateData,
+          include: { gadPlan: { include: { office: true } } },
         });
-      }
 
-      await AuditService.logAction({
-        userId: actorUser.id,
-        action: 'GAD_PLAN_ITEM_UPDATED',
-        entityType: 'GADPlanItem',
-        entityId: updated.id,
-        beforeState: { id: existingItem.id, activity: existingItem.activity },
-        afterState: { id: updated.id, activity: updated.activity },
-        req,
+        if (data.status && actorUser.role === Role.ADMIN) {
+          await tx.gADPlan.update({
+            where: { id: itemRes.gadPlanId },
+            data: { status: data.status as GADPlanStatus },
+          });
+        }
+
+        await AuditService.logActionTx(tx, {
+          userId: actorUser.id,
+          action: 'GAD_PLAN_ITEM_UPDATED',
+          entityType: 'GADPlanItem',
+          entityId: itemRes.id,
+          beforeState: { id: existingItem.id, activity: existingItem.activity },
+          afterState: { id: itemRes.id, activity: itemRes.activity },
+          req,
+        });
+
+        return itemRes;
       });
 
       return {
@@ -387,20 +394,24 @@ export class GADPlanService {
     if (data.totalBudget !== undefined) planData.totalBudget = parseFloat(String(data.totalBudget));
     if (data.gadBudget !== undefined) planData.gadBudget = parseFloat(String(data.gadBudget));
 
-    const updatedPlan = await prisma.gADPlan.update({
-      where: { id },
-      data: planData,
-      include: { office: true },
-    });
+    const updatedPlan = await prisma.$transaction(async (tx) => {
+      const planRes = await tx.gADPlan.update({
+        where: { id },
+        data: planData,
+        include: { office: true },
+      });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'GAD_PLAN_STATUS_UPDATED',
-      entityType: 'GADPlan',
-      entityId: id,
-      beforeState: { status: existingPlan.status },
-      afterState: { status: updatedPlan.status },
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'GAD_PLAN_STATUS_UPDATED',
+        entityType: 'GADPlan',
+        entityId: id,
+        beforeState: { status: existingPlan.status },
+        afterState: { status: planRes.status },
+        req,
+      });
+
+      return planRes;
     });
 
     return {
@@ -438,20 +449,24 @@ export class GADPlanService {
       throw new OfficeScopeError('Encoders cannot modify plans of other offices');
     }
 
-    const updated = await prisma.gADPlan.update({
-      where: { id: targetPlanId },
-      data: { status },
-      include: { office: true },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const p = await tx.gADPlan.update({
+        where: { id: targetPlanId },
+        data: { status },
+        include: { office: true },
+      });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'GAD_PLAN_STATUS_CHANGED',
-      entityType: 'GADPlan',
-      entityId: targetPlanId,
-      beforeState: { status: existing.status },
-      afterState: { status: updated.status },
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'GAD_PLAN_STATUS_CHANGED',
+        entityType: 'GADPlan',
+        entityId: targetPlanId,
+        beforeState: { status: existing.status },
+        afterState: { status: p.status },
+        req,
+      });
+
+      return p;
     });
 
     return updated;
@@ -473,14 +488,16 @@ export class GADPlanService {
         throw new OfficeScopeError('Encoders cannot delete items belonging to other offices');
       }
 
-      await prisma.gADPlanItem.delete({ where: { id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.gADPlanItem.delete({ where: { id } });
 
-      await AuditService.logAction({
-        userId: actorUser.id,
-        action: 'GAD_PLAN_ITEM_DELETED',
-        entityType: 'GADPlanItem',
-        entityId: id,
-        req,
+        await AuditService.logActionTx(tx, {
+          userId: actorUser.id,
+          action: 'GAD_PLAN_ITEM_DELETED',
+          entityType: 'GADPlanItem',
+          entityId: id,
+          req,
+        });
       });
 
       return { message: 'GAD Plan line item deleted' };
@@ -495,14 +512,16 @@ export class GADPlanService {
       throw new OfficeScopeError('Encoders cannot delete plans of other offices');
     }
 
-    await prisma.gADPlan.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.gADPlan.delete({ where: { id } });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'GAD_PLAN_DELETED',
-      entityType: 'GADPlan',
-      entityId: id,
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'GAD_PLAN_DELETED',
+        entityType: 'GADPlan',
+        entityId: id,
+        req,
+      });
     });
 
     return { message: 'Annual GAD Plan deleted' };
@@ -512,6 +531,17 @@ export class GADPlanService {
    * Public GAD Plan query: Returns only APPROVED plans with public line items
    */
   public static async getPublicGADPlans(params?: { year?: number; officeId?: string }) {
+    if (!isDatabaseConnected()) {
+      let list = FALLBACK_GAD_PLANS;
+      if (params?.year) {
+        list = list.filter((p) => p.fiscalYear === Number(params.year));
+      }
+      if (params?.officeId) {
+        list = list.filter((p) => p.officeId === params.officeId || p.office.toLowerCase() === params.officeId.toLowerCase());
+      }
+      return list;
+    }
+
     try {
       const where: any = {
         status: GADPlanStatus.APPROVED,
@@ -559,8 +589,7 @@ export class GADPlanService {
           budget: Number(item.budget),
         })),
       }));
-    } catch (err) {
-      console.warn('GADPlanService.getPublicGADPlans fallback:', err);
+    } catch {
       let list = FALLBACK_GAD_PLANS;
       if (params?.year) {
         list = list.filter((p) => p.fiscalYear === Number(params.year));

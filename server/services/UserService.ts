@@ -1,69 +1,160 @@
 import bcrypt from 'bcryptjs';
-import prisma from '../lib/prisma';
+import prisma, { isDatabaseConnected } from '../lib/prisma';
 import { Role } from '@prisma/client';
 import { NotFoundError, ConflictError, AppError } from '../lib/errors';
 import { AuditService } from './AuditService';
 import { Request } from 'express';
 
+const DEMO_USERS_LIST = [
+  {
+    id: 'usr-admin-01',
+    email: 'admin@talibon.gov.ph',
+    fullName: 'System Administrator',
+    role: 'ADMIN',
+    officeId: 'off-mpdc',
+    barangayId: null,
+    isActive: true,
+    createdAt: new Date(),
+    office: { id: 'off-mpdc', code: 'MPDC', name: 'Municipal Planning and Development Coordinator' },
+    barangay: null,
+  },
+  {
+    id: 'usr-encoder-01',
+    email: 'encoder@talibon.gov.ph',
+    fullName: 'GAD Encoder (MSWDO)',
+    role: 'ENCODER',
+    officeId: 'off-mswdo',
+    barangayId: null,
+    isActive: true,
+    createdAt: new Date(),
+    office: { id: 'off-mswdo', code: 'MSWDO', name: 'Municipal Social Welfare and Development Office' },
+    barangay: null,
+  },
+  {
+    id: 'usr-viewer-01',
+    email: 'viewer@talibon.gov.ph',
+    fullName: 'Municipal Auditor / Viewer',
+    role: 'VIEWER',
+    officeId: null,
+    barangayId: null,
+    isActive: true,
+    createdAt: new Date(),
+    office: null,
+    barangay: null,
+  },
+];
+
 export class UserService {
   public static async getUsers(params?: { search?: string; role?: string; officeId?: string }) {
-    const where: any = {};
-    if (params?.search) {
-      where.OR = [
-        { fullName: { contains: params.search, mode: 'insensitive' } },
-        { email: { contains: params.search, mode: 'insensitive' } },
-      ];
-    }
-    if (params?.role) {
-      where.role = params.role as Role;
-    }
-    if (params?.officeId) {
-      where.officeId = params.officeId;
+    if (!isDatabaseConnected()) {
+      let users = DEMO_USERS_LIST;
+      if (params?.role) {
+        users = users.filter((u) => u.role === params.role);
+      }
+      if (params?.officeId) {
+        users = users.filter((u) => u.officeId === params.officeId);
+      }
+      if (params?.search) {
+        const s = params.search.toLowerCase();
+        users = users.filter((u) => u.fullName.toLowerCase().includes(s) || u.email.toLowerCase().includes(s));
+      }
+      return users.map((u) => ({
+        ...u,
+        name: u.fullName,
+        office: u.office?.code || u.office?.name || '',
+      }));
     }
 
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        role: true,
-        officeId: true,
-        barangayId: true,
-        isActive: true,
-        createdAt: true,
-        office: { select: { id: true, code: true, name: true } },
-        barangay: { select: { id: true, code: true, name: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    try {
+      const where: any = {};
+      if (params?.search) {
+        where.OR = [
+          { fullName: { contains: params.search, mode: 'insensitive' } },
+          { email: { contains: params.search, mode: 'insensitive' } },
+        ];
+      }
+      if (params?.role) {
+        where.role = params.role as Role;
+      }
+      if (params?.officeId) {
+        where.officeId = params.officeId;
+      }
 
-    return users.map((u) => ({
-      ...u,
-      name: u.fullName,
-      office: u.office?.code || u.office?.name || '',
-    }));
+      const users = await prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          fullName: true,
+          role: true,
+          officeId: true,
+          barangayId: true,
+          isActive: true,
+          createdAt: true,
+          office: { select: { id: true, code: true, name: true } },
+          barangay: { select: { id: true, code: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return users.map((u) => ({
+        ...u,
+        name: u.fullName,
+        office: u.office?.code || u.office?.name || '',
+      }));
+    } catch {
+      return DEMO_USERS_LIST.map((u) => ({
+        ...u,
+        name: u.fullName,
+        office: u.office?.code || u.office?.name || '',
+      }));
+    }
   }
 
   public static async getUserById(id: string) {
-    const user = await prisma.user.findUnique({
-      where: { id },
-      include: {
-        office: true,
-        barangay: true,
-      },
-    });
-
-    if (!user) {
+    if (!isDatabaseConnected()) {
+      const user = DEMO_USERS_LIST.find((u) => u.id === id || u.email === id);
+      if (user) {
+        return {
+          ...user,
+          name: user.fullName,
+          office: user.office?.code || user.office?.name || '',
+        };
+      }
       throw new NotFoundError('User');
     }
 
-    const { passwordHash: _, ...safeUser } = user;
-    return {
-      ...safeUser,
-      name: user.fullName,
-      office: user.office?.code || user.office?.name || '',
-    };
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id },
+        include: {
+          office: true,
+          barangay: true,
+        },
+      });
+
+      if (!user) {
+        throw new NotFoundError('User');
+      }
+
+      const { passwordHash: _, ...safeUser } = user;
+      return {
+        ...safeUser,
+        name: user.fullName,
+        office: user.office?.code || user.office?.name || '',
+      };
+    } catch (err: any) {
+      if (err instanceof NotFoundError) throw err;
+      const user = DEMO_USERS_LIST.find((u) => u.id === id || u.email === id);
+      if (user) {
+        return {
+          ...user,
+          name: user.fullName,
+          office: user.office?.code || user.office?.name || '',
+        };
+      }
+      throw new NotFoundError('User');
+    }
   }
 
   public static async createUser(data: any, actorUserId?: string, req?: Request) {

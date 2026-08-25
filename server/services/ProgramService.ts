@@ -1,4 +1,4 @@
-import prisma from '../lib/prisma';
+import prisma, { isDatabaseConnected } from '../lib/prisma';
 import { ProgramStatus, Role } from '@prisma/client';
 import { NotFoundError, OfficeScopeError } from '../lib/errors';
 import { AuditService } from './AuditService';
@@ -123,32 +123,36 @@ export class ProgramService {
       effectiveOfficeId = defaultOffice?.id;
     }
 
-    const program = await prisma.program.create({
-      data: {
-        title: data.title.trim(),
-        description: data.description || null,
-        sector: data.sector || 'General',
-        fiscalYear: parseInt(String(data.fiscalYear || data.year || new Date().getFullYear()), 10),
-        officeId: effectiveOfficeId!,
-        budgetTarget: parseFloat(String(data.budgetTarget || data.budget || '0')),
-        budgetActual: parseFloat(String(data.budgetActual || '0')),
-        status: (data.status as ProgramStatus) || ProgramStatus.ACTIVE,
-        targetMale: parseInt(String(data.targetMale || '0'), 10),
-        targetFemale: parseInt(String(data.targetFemale || '0'), 10),
-        actualMale: parseInt(String(data.actualMale || '0'), 10),
-        actualFemale: parseInt(String(data.actualFemale || '0'), 10),
-        createdById: actorUser.id,
-      },
-      include: { office: true },
-    });
+    const program = await prisma.$transaction(async (tx) => {
+      const prog = await tx.program.create({
+        data: {
+          title: data.title.trim(),
+          description: data.description || null,
+          sector: data.sector || 'General',
+          fiscalYear: parseInt(String(data.fiscalYear || data.year || new Date().getFullYear()), 10),
+          officeId: effectiveOfficeId!,
+          budgetTarget: parseFloat(String(data.budgetTarget || data.budget || '0')),
+          budgetActual: parseFloat(String(data.budgetActual || '0')),
+          status: (data.status as ProgramStatus) || ProgramStatus.ACTIVE,
+          targetMale: parseInt(String(data.targetMale || '0'), 10),
+          targetFemale: parseInt(String(data.targetFemale || '0'), 10),
+          actualMale: parseInt(String(data.actualMale || '0'), 10),
+          actualFemale: parseInt(String(data.actualFemale || '0'), 10),
+          createdById: actorUser.id,
+        },
+        include: { office: true },
+      });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'PROGRAM_CREATED',
-      entityType: 'Program',
-      entityId: program.id,
-      afterState: { id: program.id, title: program.title, fiscalYear: program.fiscalYear, budgetTarget: Number(program.budgetTarget) },
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'PROGRAM_CREATED',
+        entityType: 'Program',
+        entityId: prog.id,
+        afterState: { id: prog.id, title: prog.title, fiscalYear: prog.fiscalYear, budgetTarget: Number(prog.budgetTarget) },
+        req,
+      });
+
+      return prog;
     });
 
     return {
@@ -199,20 +203,24 @@ export class ProgramService {
       updateData.officeId = data.officeId;
     }
 
-    const updated = await prisma.program.update({
-      where: { id },
-      data: updateData,
-      include: { office: true },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const prog = await tx.program.update({
+        where: { id },
+        data: updateData,
+        include: { office: true },
+      });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'PROGRAM_UPDATED',
-      entityType: 'Program',
-      entityId: updated.id,
-      beforeState: { id: existing.id, title: existing.title, status: existing.status },
-      afterState: { id: updated.id, title: updated.title, status: updated.status },
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'PROGRAM_UPDATED',
+        entityType: 'Program',
+        entityId: prog.id,
+        beforeState: { id: existing.id, title: existing.title, status: existing.status },
+        afterState: { id: prog.id, title: prog.title, status: prog.status },
+        req,
+      });
+
+      return prog;
     });
 
     return {
@@ -239,15 +247,17 @@ export class ProgramService {
       throw new OfficeScopeError('Encoders cannot delete programs of other offices');
     }
 
-    await prisma.program.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.program.delete({ where: { id } });
 
-    await AuditService.logAction({
-      userId: actorUser.id,
-      action: 'PROGRAM_DELETED',
-      entityType: 'Program',
-      entityId: id,
-      beforeState: existing,
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUser.id,
+        action: 'PROGRAM_DELETED',
+        entityType: 'Program',
+        entityId: id,
+        beforeState: existing,
+        req,
+      });
     });
 
     return { message: 'Program deleted successfully' };
@@ -257,6 +267,17 @@ export class ProgramService {
    * Public Program listing (only Active/Completed, sanitized)
    */
   public static async getPublicPrograms(params?: { year?: number; sector?: string }) {
+    if (!isDatabaseConnected()) {
+      let list = FALLBACK_PROGRAMS.filter((p) => p.status === 'ACTIVE' || p.status === 'COMPLETED');
+      if (params?.year) {
+        list = list.filter((p) => p.fiscalYear === Number(params.year));
+      }
+      if (params?.sector) {
+        list = list.filter((p) => p.sector.toLowerCase() === params.sector?.toLowerCase());
+      }
+      return list;
+    }
+
     try {
       const where: any = {
         status: { in: [ProgramStatus.ACTIVE, ProgramStatus.COMPLETED] },
@@ -305,8 +326,7 @@ export class ProgramService {
         office: p.office.code || p.office.name,
         officeName: p.office.name,
       }));
-    } catch (err) {
-      console.warn('ProgramService.getPublicPrograms fallback:', err);
+    } catch {
       let list = FALLBACK_PROGRAMS.filter((p) => p.status === 'ACTIVE' || p.status === 'COMPLETED');
       if (params?.year) {
         list = list.filter((p) => p.fiscalYear === Number(params.year));

@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
 export const uuidSchema = z.string().uuid({ message: 'Invalid UUID format' });
+export const uuidParamSchema = z.object({
+  id: uuidSchema,
+});
+export const itemUuidParamSchema = z.object({
+  id: uuidSchema,
+  itemId: uuidSchema,
+});
 
 // Common pagination and filter schema
 export const paginationQuerySchema = z.object({
