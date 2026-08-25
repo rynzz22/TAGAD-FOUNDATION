@@ -6,17 +6,25 @@ import prisma from '../lib/prisma';
 export const getGPBExcel = async (req: Request, res: Response) => {
   const { year, office } = req.query;
   const filter: any = {};
-  if (year) filter.year = parseInt(year as string);
-  if (office) filter.office = office;
+  if (year) filter.fiscalYear = parseInt(year as string);
+  if (office) {
+    filter.office = { OR: [{ code: office as string }, { name: office as string }] };
+  }
 
   try {
-    const plans = await prisma.gADPlan.findMany({ where: filter });
+    const plans = await prisma.gADPlan.findMany({
+      where: filter,
+      include: {
+        office: true,
+        items: true,
+      }
+    });
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('GPB');
 
     worksheet.mergeCells('A1:K1');
-    worksheet.getCell('A1').value = `GENDER AND BUDGET PLAN — Municipality of Talibon — ${year || 'All Years'}`;
+    worksheet.getCell('A1').value = `GENDER AND DEVELOPMENT PLAN AND BUDGET — Municipality of Talibon — ${year || 'All Years'}`;
     worksheet.getCell('A1').font = { bold: true, size: 16 };
     worksheet.getCell('A1').alignment = { horizontal: 'center' };
 
@@ -34,24 +42,27 @@ export const getGPBExcel = async (req: Request, res: Response) => {
       { header: 'Status', key: 'status', width: 12 },
     ];
 
-    plans.forEach((plan, index) => {
-      worksheet.addRow({
-        no: index + 1,
-        issue: plan.genderIssue,
-        result: plan.gadResult,
-        activity: plan.activity,
-        indicator: plan.performanceIndicator,
-        target: plan.targetGroup,
-        timeline: plan.timeline,
-        office: plan.responsibleOffice,
-        budget: plan.budget,
-        source: plan.fundSource,
-        status: plan.status,
+    let rowIdx = 1;
+    plans.forEach((plan) => {
+      plan.items.forEach((item) => {
+        worksheet.addRow({
+          no: rowIdx++,
+          issue: item.genderIssue,
+          result: item.gadResult,
+          activity: item.activity,
+          indicator: item.performanceIndicator,
+          target: item.targetGroup,
+          timeline: item.timeline,
+          office: item.responsibleOffice,
+          budget: Number(item.budget),
+          source: item.fundSource,
+          status: plan.status,
+        });
       });
     });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=GPB_${year}.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=GPB_${year || 'ALL'}.xlsx`);
 
     await workbook.xlsx.write(res);
     res.end();
@@ -63,55 +74,107 @@ export const getGPBExcel = async (req: Request, res: Response) => {
 export const getGARExcel = async (req: Request, res: Response) => {
   const { year, office } = req.query;
   const filter: any = {};
-  if (year) filter.year = parseInt(year as string);
-  if (office) filter.office = office;
+  if (year) filter.fiscalYear = parseInt(year as string);
 
   try {
-    const accs = await prisma.gADAccomplishment.findMany({
-      where: { gadPlan: filter },
-      include: { gadPlan: true }
+    const accomplishments = await prisma.gADAccomplishment.findMany({
+      where: filter,
+      include: {
+        program: { include: { office: true } },
+        gadPlanItem: { include: { gadPlan: { include: { office: true } } } },
+        attachments: true
+      }
     });
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('GAR');
 
-    worksheet.mergeCells('A1:J1');
-    worksheet.getCell('A1').value = `GENDER AND DEVELOPMENT ACCOMPLISHMENT REPORT — Municipality of Talibon — ${year || 'All Years'}`;
+    worksheet.mergeCells('A1:L1');
+    worksheet.getCell('A1').value = `GAD ACCOMPLISHMENT REPORT — Municipality of Talibon — ${year || 'All Years'}`;
     worksheet.getCell('A1').font = { bold: true, size: 16 };
     worksheet.getCell('A1').alignment = { horizontal: 'center' };
 
     worksheet.columns = [
       { header: 'No.', key: 'no', width: 5 },
-      { header: 'Activity', key: 'activity', width: 30 },
-      { header: 'Actual Output', key: 'output', width: 30 },
-      { header: 'Beneficiaries (M)', key: 'm', width: 15 },
-      { header: 'Beneficiaries (F)', key: 'f', width: 15 },
-      { header: 'Total', key: 'total', width: 15 },
-      { header: 'Budget Allocated', key: 'allocated', width: 15 },
-      { header: 'Budget Used', key: 'used', width: 15 },
-      { header: 'Utilization %', key: 'percent', width: 12 },
-      { header: 'Remarks', key: 'remarks', width: 25 },
+      { header: 'Activity / Program', key: 'activity', width: 30 },
+      { header: 'Responsible Office', key: 'office', width: 20 },
+      { header: 'Actual Output', key: 'actualOutput', width: 30 },
+      { header: 'Approved Budget', key: 'approvedBudget', width: 15 },
+      { header: 'Actual Budget Used', key: 'actualBudget', width: 15 },
+      { header: 'Male Beneficiaries', key: 'male', width: 15 },
+      { header: 'Female Beneficiaries', key: 'female', width: 15 },
+      { header: 'Total Beneficiaries', key: 'total', width: 15 },
+      { header: 'Variance / Remarks', key: 'remarks', width: 25 },
     ];
 
-    accs.forEach((acc, index) => {
-      const total = acc.actualBeneficiaryMale + acc.actualBeneficiaryFemale;
-      const percent = (acc.actualBudgetUsed / acc.gadPlan.budget) * 100;
+    accomplishments.forEach((acc, index) => {
+      const activityTitle = acc.gadPlanItem?.activity || acc.program?.title || 'GAD Undertaking';
+      const officeName = acc.gadPlanItem?.gadPlan?.office?.name || acc.program?.office?.name || 'LGU Talibon';
+      const approvedBudget = acc.gadPlanItem?.budget ? Number(acc.gadPlanItem.budget) : (acc.program?.budgetTarget ? Number(acc.program.budgetTarget) : 0);
+
       worksheet.addRow({
         no: index + 1,
-        activity: acc.gadPlan.activity,
-        output: acc.actualOutput,
-        m: acc.actualBeneficiaryMale,
-        f: acc.actualBeneficiaryFemale,
-        total,
-        allocated: acc.gadPlan.budget,
-        used: acc.actualBudgetUsed,
-        percent: `${percent.toFixed(2)}%`,
-        remarks: acc.remarks,
+        activity: activityTitle,
+        office: officeName,
+        actualOutput: acc.actualOutput,
+        approvedBudget,
+        actualBudget: Number(acc.actualBudgetUsed),
+        male: acc.actualMale,
+        female: acc.actualFemale,
+        total: acc.actualMale + acc.actualFemale,
+        remarks: acc.remarks || acc.varianceExplanation || '',
       });
     });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=GAR_${year}.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=GAR_${year || 'ALL'}.xlsx`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getBeneficiariesExcel = async (req: Request, res: Response) => {
+  try {
+    const beneficiaries = await prisma.beneficiary.findMany({
+      where: { isArchived: false },
+      include: { barangay: true, office: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Beneficiaries');
+
+    worksheet.columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'First Name', key: 'firstName', width: 20 },
+      { header: 'Last Name', key: 'lastName', width: 20 },
+      { header: 'Sex', key: 'sex', width: 10 },
+      { header: 'Age', key: 'age', width: 8 },
+      { header: 'Barangay', key: 'barangay', width: 20 },
+      { header: 'Sector', key: 'sector', width: 20 },
+      { header: 'Office', key: 'office', width: 20 },
+      { header: 'Date Encoded', key: 'dateEncoded', width: 15 },
+    ];
+
+    beneficiaries.forEach((b) => {
+      worksheet.addRow({
+        id: b.id.slice(0, 8),
+        firstName: b.firstName,
+        lastName: b.lastName,
+        sex: b.sex,
+        age: b.age,
+        barangay: b.barangay.name,
+        sector: b.sector,
+        office: b.office?.code || b.officeId || '',
+        dateEncoded: b.createdAt.toISOString().split('T')[0],
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=Beneficiaries_${new Date().getFullYear()}.xlsx`);
 
     await workbook.xlsx.write(res);
     res.end();
@@ -121,51 +184,36 @@ export const getGARExcel = async (req: Request, res: Response) => {
 };
 
 export const getBeneficiariesPDF = async (req: Request, res: Response) => {
-  const { year } = req.query;
-  const filter: any = { isArchived: false };
-  if (year) {
-    filter.dateEncoded = {
-      gte: new Date(`${year}-01-01`),
-      lte: new Date(`${year}-12-31`)
-    };
-  }
-
   try {
-    const beneficiaries = await prisma.beneficiary.findMany({ where: filter });
+    const beneficiaries = await prisma.beneficiary.findMany({
+      where: { isArchived: false },
+      include: { barangay: true, office: true },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
 
-    const doc = new PDFDocument({ margin: 30 });
+    const doc = new PDFDocument({ margin: 40 });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename=Beneficiaries.pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Beneficiaries_Report.pdf`);
+
     doc.pipe(res);
 
-    doc.fontSize(16).text('Municipality of Talibon', { align: 'center' });
-    doc.fontSize(14).text('Beneficiary List Report', { align: 'center' });
+    doc.fontSize(16).text('MUNICIPALITY OF TALIBON', { align: 'center' });
+    doc.fontSize(12).text('Gender and Development (GAD) Beneficiary Registry', { align: 'center' });
     doc.moveDown();
 
-    doc.fontSize(10);
-    // Table Header
-    const tableTop = 150;
-    doc.text('Name', 30, tableTop);
-    doc.text('Sex', 150, tableTop);
-    doc.text('Age', 200, tableTop);
-    doc.text('Barangay', 250, tableTop);
-    doc.text('Sector', 350, tableTop);
-    doc.text('Date', 450, tableTop);
+    doc.fontSize(10).text(`Generated Date: ${new Date().toLocaleDateString()}`);
+    doc.text(`Total Records Displayed: ${beneficiaries.length}`);
+    doc.moveDown();
 
-    let y = tableTop + 20;
-    beneficiaries.forEach(b => {
-      if (y > 700) { doc.addPage(); y = 50; }
-      doc.text(`${b.firstName} ${b.lastName}`, 30, y);
-      doc.text(b.sex, 150, y);
-      doc.text(b.age.toString(), 200, y);
-      doc.text(b.barangay, 250, y);
-      doc.text(b.sector, 350, y);
-      doc.text(new Date(b.dateEncoded).toLocaleDateString(), 450, y);
-      y += 15;
+    beneficiaries.forEach((b, i) => {
+      doc.fontSize(9).text(
+        `${i + 1}. ${b.lastName}, ${b.firstName} | Sex: ${b.sex} | Age: ${b.age} | Brgy: ${b.barangay.name} | Sector: ${b.sector}`
+      );
     });
 
     doc.end();
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error generating PDF' });
   }
 };

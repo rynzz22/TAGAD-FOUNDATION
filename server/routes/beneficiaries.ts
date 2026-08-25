@@ -1,15 +1,21 @@
-import express from 'express';
-import { getBeneficiaries, createBeneficiary, updateBeneficiary, archiveBeneficiary, getBeneficiaryStats } from '../controllers/beneficiaryController';
-import { protect, restrictTo } from '../middleware/authMiddleware';
+import { Router } from 'express';
+import {
+  getBeneficiaries,
+  getBeneficiaryById,
+  createBeneficiary,
+  updateBeneficiary,
+  archiveBeneficiary,
+} from '../controllers/admin/beneficiaryController';
+import { requireAuth, requireRole, requireOfficeScope } from '../middleware/authMiddleware';
+import { Role } from '@prisma/client';
 
-const router = express.Router();
+const router = Router();
 
-router.use(protect);
-
+router.use(requireAuth);
 router.get('/', getBeneficiaries);
-router.get('/stats', getBeneficiaryStats);
-router.post('/', restrictTo('ADMIN', 'ENCODER'), createBeneficiary);
-router.put('/:id', restrictTo('ADMIN', 'ENCODER'), updateBeneficiary);
-router.delete('/:id', restrictTo('ADMIN'), archiveBeneficiary);
+router.get('/:id', getBeneficiaryById);
+router.post('/', requireRole(Role.ADMIN, Role.ENCODER), requireOfficeScope(), createBeneficiary);
+router.put('/:id', requireRole(Role.ADMIN, Role.ENCODER), requireOfficeScope(), updateBeneficiary);
+router.delete('/:id', requireRole(Role.ADMIN, Role.ENCODER), requireOfficeScope(), archiveBeneficiary);
 
 export default router;

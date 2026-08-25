@@ -1,14 +1,21 @@
-import express from 'express';
-import { getPrograms, createProgram, updateProgram, deleteProgram } from '../controllers/programController';
-import { protect, restrictTo } from '../middleware/authMiddleware';
+import { Router } from 'express';
+import {
+  getPrograms,
+  getProgramById,
+  createProgram,
+  updateProgram,
+  deleteProgram,
+} from '../controllers/admin/programController';
+import { requireAuth, requireRole, requireOfficeScope } from '../middleware/authMiddleware';
+import { Role } from '@prisma/client';
 
-const router = express.Router();
+const router = Router();
 
-router.use(protect);
-
+router.use(requireAuth);
 router.get('/', getPrograms);
-router.post('/', restrictTo('ADMIN', 'ENCODER'), createProgram);
-router.put('/:id', restrictTo('ADMIN', 'ENCODER'), updateProgram);
-router.delete('/:id', restrictTo('ADMIN'), deleteProgram);
+router.get('/:id', getProgramById);
+router.post('/', requireRole(Role.ADMIN, Role.ENCODER), requireOfficeScope(), createProgram);
+router.put('/:id', requireRole(Role.ADMIN, Role.ENCODER), requireOfficeScope(), updateProgram);
+router.delete('/:id', requireRole(Role.ADMIN, Role.ENCODER), requireOfficeScope(), deleteProgram);
 
 export default router;

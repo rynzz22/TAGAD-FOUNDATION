@@ -1,38 +1,45 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import prisma from '../lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'tagad_talibon_secret_2025';
-
-const generateToken = (id: number) => {
-  return jwt.sign({ id }, JWT_SECRET, { expiresIn: '7d' });
-};
+import { AuthService } from '../services/AuthService';
+import { sendSuccess, sendError } from '../lib/response';
+import { AuthenticatedRequest } from '../middleware/authMiddleware';
 
 export const login = async (req: Request, res: Response) => {
-  const { email, password } = req.body;
-
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
-
-    if (user && (await bcrypt.compare(password, user.password))) {
-      if (!user.isActive) {
-        return res.status(401).json({ message: 'Account is deactivated' });
-      }
-
-      const { password: _, ...userWithoutPassword } = user;
-      res.json({
-        token: generateToken(user.id),
-        user: userWithoutPassword,
-      });
-    } else {
-      res.status(401).json({ message: 'Invalid email or password' });
-    }
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    const { email, password } = req.body;
+    const result = await AuthService.login(email, password, req);
+    return sendSuccess(res, result);
+  } catch (error: any) {
+    return sendError(res, error, error.statusCode || 401);
   }
 };
 
-export const getMe = async (req: any, res: Response) => {
-  res.json(req.user);
+export const refreshToken = async (req: Request, res: Response) => {
+  try {
+    const { refreshToken: token } = req.body;
+    const result = await AuthService.refreshToken(token);
+    return sendSuccess(res, result);
+  } catch (error: any) {
+    return sendError(res, error, error.statusCode || 401);
+  }
+};
+
+export const getMe = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return sendError(res, 'Unauthenticated', 401);
+    }
+    const profile = await AuthService.getMe(req.user.id);
+    return sendSuccess(res, profile);
+  } catch (error: any) {
+    return sendError(res, error, error.statusCode || 500);
+  }
+};
+
+export const logout = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await AuthService.logout(req.user?.id, req);
+    return sendSuccess(res, result);
+  } catch (error: any) {
+    return sendError(res, error, error.statusCode || 500);
+  }
 };

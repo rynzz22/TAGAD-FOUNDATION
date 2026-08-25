@@ -1,0 +1,190 @@
+import bcrypt from 'bcryptjs';
+import prisma from '../lib/prisma';
+import { Role } from '@prisma/client';
+import { NotFoundError, ConflictError, AppError } from '../lib/errors';
+import { AuditService } from './AuditService';
+import { Request } from 'express';
+
+export class UserService {
+  public static async getUsers(params?: { search?: string; role?: string; officeId?: string }) {
+    const where: any = {};
+    if (params?.search) {
+      where.OR = [
+        { fullName: { contains: params.search, mode: 'insensitive' } },
+        { email: { contains: params.search, mode: 'insensitive' } },
+      ];
+    }
+    if (params?.role) {
+      where.role = params.role as Role;
+    }
+    if (params?.officeId) {
+      where.officeId = params.officeId;
+    }
+
+    const users = await prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        officeId: true,
+        barangayId: true,
+        isActive: true,
+        createdAt: true,
+        office: { select: { id: true, code: true, name: true } },
+        barangay: { select: { id: true, code: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return users.map((u) => ({
+      ...u,
+      name: u.fullName,
+      office: u.office?.code || u.office?.name || '',
+    }));
+  }
+
+  public static async getUserById(id: string) {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        office: true,
+        barangay: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    const { passwordHash: _, ...safeUser } = user;
+    return {
+      ...safeUser,
+      name: user.fullName,
+      office: user.office?.code || user.office?.name || '',
+    };
+  }
+
+  public static async createUser(data: any, actorUserId?: string, req?: Request) {
+    const existing = await prisma.user.findUnique({
+      where: { email: data.email.toLowerCase().trim() },
+    });
+
+    if (existing) {
+      throw new ConflictError('A user with this email address already exists');
+    }
+
+    // Resolve office ID if passed as string code/name
+    let resolvedOfficeId = data.officeId;
+    if (data.office && !resolvedOfficeId) {
+      const found = await prisma.office.findFirst({
+        where: { OR: [{ code: data.office }, { name: data.office }] },
+      });
+      if (found) resolvedOfficeId = found.id;
+    }
+
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+
+    const user = await prisma.user.create({
+      data: {
+        email: data.email.toLowerCase().trim(),
+        passwordHash: hashedPassword,
+        fullName: data.fullName || data.name || 'System User',
+        role: (data.role as Role) || Role.ENCODER,
+        officeId: resolvedOfficeId || null,
+        barangayId: data.barangayId || null,
+        isActive: true,
+      },
+      include: {
+        office: true,
+        barangay: true,
+      },
+    });
+
+    const { passwordHash: _, ...safeUser } = user;
+
+    await AuditService.logAction({
+      userId: actorUserId,
+      action: 'USER_CREATED',
+      entityType: 'User',
+      entityId: user.id,
+      afterState: safeUser,
+      req,
+    });
+
+    return {
+      ...safeUser,
+      name: user.fullName,
+      office: user.office?.code || user.office?.name || '',
+    };
+  }
+
+  public static async updateUser(id: string, data: any, actorUserId?: string, req?: Request) {
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('User');
+    }
+
+    const updateData: any = {};
+    if (data.fullName || data.name) updateData.fullName = data.fullName || data.name;
+    if (data.email) updateData.email = data.email.toLowerCase().trim();
+    if (data.role) updateData.role = data.role as Role;
+    if (data.officeId !== undefined) updateData.officeId = data.officeId || null;
+    if (data.barangayId !== undefined) updateData.barangayId = data.barangayId || null;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+
+    if (data.password) {
+      updateData.passwordHash = await bcrypt.hash(data.password, 10);
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: updateData,
+      include: { office: true, barangay: true },
+    });
+
+    const { passwordHash: _, ...safeUpdated } = updated;
+    const { passwordHash: __, ...safeExisting } = existing;
+
+    await AuditService.logAction({
+      userId: actorUserId,
+      action: 'USER_UPDATED',
+      entityType: 'User',
+      entityId: updated.id,
+      beforeState: safeExisting,
+      afterState: safeUpdated,
+      req,
+    });
+
+    return {
+      ...safeUpdated,
+      name: updated.fullName,
+      office: updated.office?.code || updated.office?.name || '',
+    };
+  }
+
+  public static async deactivateUser(id: string, actorUserId?: string, req?: Request) {
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('User');
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: { isActive: false },
+    });
+
+    await AuditService.logAction({
+      userId: actorUserId,
+      action: 'USER_DEACTIVATED',
+      entityType: 'User',
+      entityId: id,
+      beforeState: { isActive: true },
+      afterState: { isActive: false },
+      req,
+    });
+
+    return { message: 'User account deactivated successfully' };
+  }
+}

@@ -1,0 +1,307 @@
+import prisma from '../lib/prisma';
+import { ProgramStatus, Role } from '@prisma/client';
+import { NotFoundError, OfficeScopeError } from '../lib/errors';
+import { AuditService } from './AuditService';
+import { Request } from 'express';
+
+export class ProgramService {
+  public static async getPrograms(
+    params: {
+      year?: number;
+      officeId?: string;
+      office?: string;
+      sector?: string;
+      status?: string;
+      search?: string;
+    },
+    actorUser?: { id: string; role: Role; officeId: string | null }
+  ) {
+    const where: any = {};
+
+    if (params.year) {
+      where.fiscalYear = Number(params.year);
+    }
+
+    if (params.officeId) {
+      where.officeId = params.officeId;
+    } else if (params.office) {
+      where.office = {
+        OR: [{ code: params.office }, { name: params.office }, { id: params.office }],
+      };
+    }
+
+    if (params.sector) {
+      where.sector = params.sector;
+    }
+
+    if (params.status) {
+      where.status = params.status as ProgramStatus;
+    }
+
+    if (params.search) {
+      where.OR = [
+        { title: { contains: params.search, mode: 'insensitive' } },
+        { description: { contains: params.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Role-based scoping: ENCODER sees only own office programs when filtering admin view
+    if (actorUser && actorUser.role === Role.ENCODER && actorUser.officeId) {
+      where.officeId = actorUser.officeId;
+    }
+
+    const programs = await prisma.program.findMany({
+      where,
+      include: {
+        office: { select: { id: true, code: true, name: true } },
+        createdBy: { select: { id: true, fullName: true } },
+        accomplishments: {
+          include: { attachments: true },
+        },
+      },
+      orderBy: [{ fiscalYear: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    return programs.map((p) => ({
+      ...p,
+      budget: Number(p.budgetTarget),
+      budgetTarget: Number(p.budgetTarget),
+      budgetActual: Number(p.budgetActual),
+      year: p.fiscalYear,
+      office: p.office?.code || p.office?.name || '',
+      officeName: p.office?.name || '',
+      createdByName: p.createdBy?.fullName || 'System',
+    }));
+  }
+
+  public static async getProgramById(id: string) {
+    const program = await prisma.program.findUnique({
+      where: { id },
+      include: {
+        office: true,
+        createdBy: { select: { id: true, fullName: true, email: true } },
+        gadPlanItems: true,
+        accomplishments: {
+          include: { attachments: true },
+        },
+      },
+    });
+
+    if (!program) {
+      throw new NotFoundError('Program');
+    }
+
+    return {
+      ...program,
+      budget: Number(program.budgetTarget),
+      budgetTarget: Number(program.budgetTarget),
+      budgetActual: Number(program.budgetActual),
+      year: program.fiscalYear,
+      office: program.office?.code || program.office?.name || '',
+    };
+  }
+
+  public static async createProgram(
+    data: any,
+    actorUser: { id: string; role: Role; officeId: string | null },
+    req?: Request
+  ) {
+    let effectiveOfficeId = data.officeId;
+
+    if (actorUser.role === Role.ENCODER) {
+      effectiveOfficeId = actorUser.officeId;
+    } else if (!effectiveOfficeId && data.office) {
+      const found = await prisma.office.findFirst({
+        where: { OR: [{ code: data.office }, { name: data.office }] },
+      });
+      if (found) effectiveOfficeId = found.id;
+    }
+
+    if (!effectiveOfficeId) {
+      const defaultOffice = await prisma.office.findFirst();
+      effectiveOfficeId = defaultOffice?.id;
+    }
+
+    const program = await prisma.program.create({
+      data: {
+        title: data.title.trim(),
+        description: data.description || null,
+        sector: data.sector || 'General',
+        fiscalYear: parseInt(String(data.fiscalYear || data.year || new Date().getFullYear()), 10),
+        officeId: effectiveOfficeId!,
+        budgetTarget: parseFloat(String(data.budgetTarget || data.budget || '0')),
+        budgetActual: parseFloat(String(data.budgetActual || '0')),
+        status: (data.status as ProgramStatus) || ProgramStatus.ACTIVE,
+        targetMale: parseInt(String(data.targetMale || '0'), 10),
+        targetFemale: parseInt(String(data.targetFemale || '0'), 10),
+        actualMale: parseInt(String(data.actualMale || '0'), 10),
+        actualFemale: parseInt(String(data.actualFemale || '0'), 10),
+        createdById: actorUser.id,
+      },
+      include: { office: true },
+    });
+
+    await AuditService.logAction({
+      userId: actorUser.id,
+      action: 'PROGRAM_CREATED',
+      entityType: 'Program',
+      entityId: program.id,
+      afterState: { id: program.id, title: program.title, fiscalYear: program.fiscalYear, budgetTarget: Number(program.budgetTarget) },
+      req,
+    });
+
+    return {
+      ...program,
+      budget: Number(program.budgetTarget),
+      budgetTarget: Number(program.budgetTarget),
+      budgetActual: Number(program.budgetActual),
+      year: program.fiscalYear,
+      office: program.office?.code || program.office?.name || '',
+    };
+  }
+
+  public static async updateProgram(
+    id: string,
+    data: any,
+    actorUser: { id: string; role: Role; officeId: string | null },
+    req?: Request
+  ) {
+    const existing = await prisma.program.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('Program');
+    }
+
+    if (actorUser.role === Role.ENCODER && existing.officeId !== actorUser.officeId) {
+      throw new OfficeScopeError('Encoders can only modify programs belonging to their own office');
+    }
+
+    const updateData: any = {};
+    if (data.title !== undefined) updateData.title = data.title.trim();
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.sector !== undefined) updateData.sector = data.sector;
+    if (data.fiscalYear !== undefined || data.year !== undefined) {
+      updateData.fiscalYear = parseInt(String(data.fiscalYear || data.year), 10);
+    }
+    if (data.budgetTarget !== undefined || data.budget !== undefined) {
+      updateData.budgetTarget = parseFloat(String(data.budgetTarget || data.budget));
+    }
+    if (data.budgetActual !== undefined) {
+      updateData.budgetActual = parseFloat(String(data.budgetActual));
+    }
+    if (data.status !== undefined) updateData.status = data.status as ProgramStatus;
+    if (data.targetMale !== undefined) updateData.targetMale = parseInt(String(data.targetMale), 10);
+    if (data.targetFemale !== undefined) updateData.targetFemale = parseInt(String(data.targetFemale), 10);
+    if (data.actualMale !== undefined) updateData.actualMale = parseInt(String(data.actualMale), 10);
+    if (data.actualFemale !== undefined) updateData.actualFemale = parseInt(String(data.actualFemale), 10);
+
+    if (actorUser.role === Role.ADMIN && data.officeId) {
+      updateData.officeId = data.officeId;
+    }
+
+    const updated = await prisma.program.update({
+      where: { id },
+      data: updateData,
+      include: { office: true },
+    });
+
+    await AuditService.logAction({
+      userId: actorUser.id,
+      action: 'PROGRAM_UPDATED',
+      entityType: 'Program',
+      entityId: updated.id,
+      beforeState: { id: existing.id, title: existing.title, status: existing.status },
+      afterState: { id: updated.id, title: updated.title, status: updated.status },
+      req,
+    });
+
+    return {
+      ...updated,
+      budget: Number(updated.budgetTarget),
+      budgetTarget: Number(updated.budgetTarget),
+      budgetActual: Number(updated.budgetActual),
+      year: updated.fiscalYear,
+      office: updated.office?.code || updated.office?.name || '',
+    };
+  }
+
+  public static async deleteProgram(
+    id: string,
+    actorUser: { id: string; role: Role; officeId: string | null },
+    req?: Request
+  ) {
+    const existing = await prisma.program.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundError('Program');
+    }
+
+    if (actorUser.role === Role.ENCODER && existing.officeId !== actorUser.officeId) {
+      throw new OfficeScopeError('Encoders cannot delete programs of other offices');
+    }
+
+    await prisma.program.delete({ where: { id } });
+
+    await AuditService.logAction({
+      userId: actorUser.id,
+      action: 'PROGRAM_DELETED',
+      entityType: 'Program',
+      entityId: id,
+      beforeState: existing,
+      req,
+    });
+
+    return { message: 'Program deleted successfully' };
+  }
+
+  /**
+   * Public Program listing (only Active/Completed, sanitized)
+   */
+  public static async getPublicPrograms(params?: { year?: number; sector?: string }) {
+    const where: any = {
+      status: { in: [ProgramStatus.ACTIVE, ProgramStatus.COMPLETED] },
+    };
+
+    if (params?.year) {
+      where.fiscalYear = Number(params.year);
+    }
+    if (params?.sector) {
+      where.sector = params.sector;
+    }
+
+    const programs = await prisma.program.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        sector: true,
+        fiscalYear: true,
+        status: true,
+        budgetTarget: true,
+        budgetActual: true,
+        targetMale: true,
+        targetFemale: true,
+        actualMale: true,
+        actualFemale: true,
+        office: { select: { code: true, name: true } },
+      },
+      orderBy: [{ fiscalYear: 'desc' }, { title: 'asc' }],
+    });
+
+    return programs.map((p) => ({
+      id: p.id,
+      title: p.title,
+      description: p.description,
+      sector: p.sector,
+      fiscalYear: p.fiscalYear,
+      status: p.status,
+      budgetTarget: Number(p.budgetTarget),
+      budgetActual: Number(p.budgetActual),
+      targetMale: p.targetMale,
+      targetFemale: p.targetFemale,
+      actualMale: p.actualMale,
+      actualFemale: p.actualFemale,
+      office: p.office.code || p.office.name,
+      officeName: p.office.name,
+    }));
+  }
+}

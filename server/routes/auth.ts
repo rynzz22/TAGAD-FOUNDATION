@@ -1,10 +1,14 @@
-import express from 'express';
-import { login, getMe } from '../controllers/authController';
-import { protect } from '../middleware/authMiddleware';
+import { Router } from 'express';
+import { login, refreshToken, getMe, logout } from '../controllers/authController';
+import { requireAuth } from '../middleware/authMiddleware';
+import { validate } from '../middleware/validate';
+import { loginSchema, refreshTokenSchema } from '../validation/schemas';
 
-const router = express.Router();
+const router = Router();
 
-router.post('/login', login);
-router.get('/me', protect, getMe);
+router.post('/login', validate(loginSchema), login);
+router.post('/refresh', validate(refreshTokenSchema), refreshToken);
+router.get('/me', requireAuth, getMe);
+router.post('/logout', requireAuth, logout);
 
 export default router;

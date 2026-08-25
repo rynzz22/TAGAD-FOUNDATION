@@ -1,14 +1,19 @@
-import express from 'express';
-import { getAccomplishments, createAccomplishment, updateAccomplishment, deleteAccomplishment } from '../controllers/gadController';
-import { protect, restrictTo } from '../middleware/authMiddleware';
+import { Router } from 'express';
+import {
+  getAccomplishments,
+  createAccomplishment,
+  updateAccomplishment,
+  deleteAccomplishment,
+} from '../controllers/admin/accomplishmentController';
+import { requireAuth, requireRole, requireOfficeScope } from '../middleware/authMiddleware';
+import { Role } from '@prisma/client';
 
-const router = express.Router();
+const router = Router();
 
-router.use(protect);
-
+router.use(requireAuth);
 router.get('/', getAccomplishments);
-router.post('/', restrictTo('ADMIN', 'ENCODER'), createAccomplishment);
-router.put('/:id', restrictTo('ADMIN', 'ENCODER'), updateAccomplishment);
-router.delete('/:id', restrictTo('ADMIN'), deleteAccomplishment);
+router.post('/', requireRole(Role.ADMIN, Role.ENCODER), requireOfficeScope(), createAccomplishment);
+router.put('/:id', requireRole(Role.ADMIN, Role.ENCODER), requireOfficeScope(), updateAccomplishment);
+router.delete('/:id', requireRole(Role.ADMIN, Role.ENCODER), requireOfficeScope(), deleteAccomplishment);
 
 export default router;

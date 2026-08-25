@@ -1,11 +1,15 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import cors from 'cors';
 import dotenv from 'dotenv';
 
-// Import Routes (todo: create these)
+// Route imports
 import authRoutes from './server/routes/auth';
+import publicRoutes from './server/routes/public';
+import adminRoutes from './server/routes/admin/index';
+
+// Transitional legacy compatibility routes
 import userRoutes from './server/routes/users';
 import beneficiaryRoutes from './server/routes/beneficiaries';
 import programRoutes from './server/routes/programs';
@@ -13,6 +17,7 @@ import gadPlanRoutes from './server/routes/gadPlans';
 import accomplishmentRoutes from './server/routes/accomplishments';
 import dashboardRoutes from './server/routes/dashboard';
 import reportRoutes from './server/routes/reports';
+import { sendError } from './server/lib/response';
 
 dotenv.config();
 
@@ -23,8 +28,22 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
-  // API Routes
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({
+      status: "ok",
+      system: "TAGAD - Talibon Analytics for Gender and Development",
+      version: "2.0.0",
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Canonical Target API Boundaries
   app.use('/api/auth', authRoutes);
+  app.use('/api/public', publicRoutes);
+  app.use('/api/admin', adminRoutes);
+
+  // Transitional Compatibility Layer (Delegates directly to hardened services)
   app.use('/api/users', userRoutes);
   app.use('/api/beneficiaries', beneficiaryRoutes);
   app.use('/api/programs', programRoutes);
@@ -33,8 +52,10 @@ async function startServer() {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/reports', reportRoutes);
 
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+  // Centralized Error Handling Middleware
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    console.error('Unhandled server error:', err);
+    sendError(res, err, err.statusCode || 500);
   });
 
   // Vite middleware for development
@@ -53,7 +74,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`TAGAD Backend Engine running on http://localhost:${PORT}`);
   });
 }
 

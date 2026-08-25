@@ -1,6 +1,6 @@
 /**
- * TAGAD System — Generated / Synchronized Database Types
- * Corresponding to PostgreSQL / Supabase Schema (Sprint 1 Foundation)
+ * TAGAD System — Canonical Database Types (Blueprint v2)
+ * PostgreSQL / Supabase Schema Definition
  */
 
 export type Json =
@@ -11,20 +11,34 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+// Canonical 3-Role Architecture
+export type CanonicalRole = 'ADMIN' | 'ENCODER' | 'VIEWER';
+
+// Legacy Role Aliases for Backward Compatibility
 export type AppRole =
+  | CanonicalRole
   | 'super_admin'
   | 'admin'
   | 'editor'
   | 'municipal_admin'
-  | 'barangay_admin';
+  | 'barangay_admin'
+  | 'PLANNER';
+
+export type BeneficiarySex = 'MALE' | 'FEMALE';
+
+export type GADPlanStatus =
+  | 'DRAFT'
+  | 'SUBMITTED'
+  | 'APPROVED'
+  | 'REVISED';
 
 export type GADProgramStatus =
   | 'DRAFT'
-  | 'PROPOSED'
-  | 'APPROVED'
-  | 'ONGOING'
+  | 'ACTIVE'
   | 'COMPLETED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'PROPOSED'
+  | 'ONGOING';
 
 export type BudgetStatus =
   | 'DRAFT'
@@ -35,6 +49,491 @@ export type BudgetStatus =
 export interface Database {
   public: {
     Tables: {
+      // ------------------------------------------------------------------------
+      // Canonical Blueprint v2 Tables
+      // ------------------------------------------------------------------------
+      tagad_offices: {
+        Row: {
+          id: string;
+          code: string;
+          name: string;
+          head_name: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          code: string;
+          name: string;
+          head_name?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          code?: string;
+          name?: string;
+          head_name?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      tagad_barangays: {
+        Row: {
+          id: string;
+          name: string;
+          code: string;
+          captain_name: string | null;
+          gad_focal_person: string | null;
+          contact_number: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          code: string;
+          captain_name?: string | null;
+          gad_focal_person?: string | null;
+          contact_number?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          code?: string;
+          captain_name?: string | null;
+          gad_focal_person?: string | null;
+          contact_number?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      tagad_households: {
+        Row: {
+          id: string;
+          household_no: string;
+          barangay_id: string;
+          purok: string | null;
+          is_4ps: boolean;
+          is_indigent: boolean;
+          head_name: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_no: string;
+          barangay_id: string;
+          purok?: string | null;
+          is_4ps?: boolean;
+          is_indigent?: boolean;
+          head_name?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_no?: string;
+          barangay_id?: string;
+          purok?: string | null;
+          is_4ps?: boolean;
+          is_indigent?: boolean;
+          head_name?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      tagad_users: {
+        Row: {
+          id: string;
+          email: string;
+          password_hash: string;
+          full_name: string;
+          role: CanonicalRole;
+          office_id: string | null;
+          barangay_id: string | null;
+          is_active: boolean;
+          avatar_url: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          password_hash: string;
+          full_name: string;
+          role?: CanonicalRole;
+          office_id?: string | null;
+          barangay_id?: string | null;
+          is_active?: boolean;
+          avatar_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          password_hash?: string;
+          full_name?: string;
+          role?: CanonicalRole;
+          office_id?: string | null;
+          barangay_id?: string | null;
+          is_active?: boolean;
+          avatar_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      tagad_beneficiaries: {
+        Row: {
+          id: string;
+          household_id: string | null;
+          office_id: string | null;
+          barangay_id: string;
+          first_name: string;
+          last_name: string;
+          middle_name: string | null;
+          sex: BeneficiarySex;
+          birthdate: string | null;
+          age: number;
+          sector: string;
+          contact_number: string | null;
+          address_street: string | null;
+          is_archived: boolean;
+          encoded_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id?: string | null;
+          office_id?: string | null;
+          barangay_id: string;
+          first_name: string;
+          last_name: string;
+          middle_name?: string | null;
+          sex: BeneficiarySex;
+          birthdate?: string | null;
+          age: number;
+          sector: string;
+          contact_number?: string | null;
+          address_street?: string | null;
+          is_archived?: boolean;
+          encoded_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string | null;
+          office_id?: string | null;
+          barangay_id?: string;
+          first_name?: string;
+          last_name?: string;
+          middle_name?: string | null;
+          sex?: BeneficiarySex;
+          birthdate?: string | null;
+          age?: number;
+          sector?: string;
+          contact_number?: string | null;
+          address_street?: string | null;
+          is_archived?: boolean;
+          encoded_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      tagad_gad_plans: {
+        Row: {
+          id: string;
+          office_id: string;
+          fiscal_year: number;
+          total_budget: number;
+          mandatory_gad_percentage: number;
+          gad_budget: number;
+          status: GADPlanStatus;
+          created_by: string | null;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          fiscal_year: number;
+          total_budget?: number;
+          mandatory_gad_percentage?: number;
+          gad_budget?: number;
+          status?: GADPlanStatus;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          office_id?: string;
+          fiscal_year?: number;
+          total_budget?: number;
+          mandatory_gad_percentage?: number;
+          gad_budget?: number;
+          status?: GADPlanStatus;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      tagad_gad_plan_items: {
+        Row: {
+          id: string;
+          gad_plan_id: string;
+          program_id: string | null;
+          gender_issue: string;
+          cause_of_issue: string | null;
+          gad_result: string;
+          activity: string;
+          performance_indicator: string;
+          target_group: string;
+          timeline: string;
+          responsible_office: string;
+          budget: number;
+          fund_source: string;
+          hgdg_score: number | null;
+          attributed_percentage: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          gad_plan_id: string;
+          program_id?: string | null;
+          gender_issue: string;
+          cause_of_issue?: string | null;
+          gad_result: string;
+          activity: string;
+          performance_indicator: string;
+          target_group: string;
+          timeline: string;
+          responsible_office: string;
+          budget?: number;
+          fund_source?: string;
+          hgdg_score?: number | null;
+          attributed_percentage?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          gad_plan_id?: string;
+          program_id?: string | null;
+          gender_issue?: string;
+          cause_of_issue?: string | null;
+          gad_result?: string;
+          activity?: string;
+          performance_indicator?: string;
+          target_group?: string;
+          timeline?: string;
+          responsible_office?: string;
+          budget?: number;
+          fund_source?: string;
+          hgdg_score?: number | null;
+          attributed_percentage?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      tagad_programs: {
+        Row: {
+          id: string;
+          office_id: string;
+          title: string;
+          description: string | null;
+          sector: string;
+          fiscal_year: number;
+          status: GADProgramStatus;
+          budget_target: number;
+          budget_actual: number;
+          target_male: number;
+          target_female: number;
+          actual_male: number;
+          actual_female: number;
+          created_by: string | null;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          title: string;
+          description?: string | null;
+          sector: string;
+          fiscal_year: number;
+          status?: GADProgramStatus;
+          budget_target?: number;
+          budget_actual?: number;
+          target_male?: number;
+          target_female?: number;
+          actual_male?: number;
+          actual_female?: number;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          office_id?: string;
+          title?: string;
+          description?: string | null;
+          sector?: string;
+          fiscal_year?: number;
+          status?: GADProgramStatus;
+          budget_target?: number;
+          budget_actual?: number;
+          target_male?: number;
+          target_female?: number;
+          actual_male?: number;
+          actual_female?: number;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      tagad_accomplishments: {
+        Row: {
+          id: string;
+          program_id: string | null;
+          gad_plan_item_id: string | null;
+          fiscal_year: number;
+          quarter: number | null;
+          actual_output: string;
+          actual_beneficiary_male: number;
+          actual_beneficiary_female: number;
+          actual_budget_used: number;
+          output_summary: string | null;
+          remarks: string | null;
+          variance_explanation: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          program_id?: string | null;
+          gad_plan_item_id?: string | null;
+          fiscal_year: number;
+          quarter?: number | null;
+          actual_output: string;
+          actual_beneficiary_male?: number;
+          actual_beneficiary_female?: number;
+          actual_budget_used?: number;
+          output_summary?: string | null;
+          remarks?: string | null;
+          variance_explanation?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          program_id?: string | null;
+          gad_plan_item_id?: string | null;
+          fiscal_year?: number;
+          quarter?: number | null;
+          actual_output?: string;
+          actual_beneficiary_male?: number;
+          actual_beneficiary_female?: number;
+          actual_budget_used?: number;
+          output_summary?: string | null;
+          remarks?: string | null;
+          variance_explanation?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      tagad_mov_attachments: {
+        Row: {
+          id: string;
+          accomplishment_id: string;
+          storage_path: string;
+          file_name: string;
+          file_type: string;
+          file_size_bytes: number;
+          uploaded_by: string | null;
+          uploaded_at: string;
+        };
+        Insert: {
+          id?: string;
+          accomplishment_id: string;
+          storage_path: string;
+          file_name: string;
+          file_type: string;
+          file_size_bytes: number;
+          uploaded_by?: string | null;
+          uploaded_at?: string;
+        };
+        Update: {
+          id?: string;
+          accomplishment_id?: string;
+          storage_path?: string;
+          file_name?: string;
+          file_type?: string;
+          file_size_bytes?: number;
+          uploaded_by?: string | null;
+          uploaded_at?: string;
+        };
+      };
+      tagad_audit_logs: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          action: string;
+          entity_type: string;
+          entity_id: string | null;
+          before_state: Json | null;
+          after_state: Json | null;
+          ip_address: string | null;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          action: string;
+          entity_type: string;
+          entity_id?: string | null;
+          before_state?: Json | null;
+          after_state?: Json | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          action?: string;
+          entity_type?: string;
+          entity_id?: string | null;
+          before_state?: Json | null;
+          after_state?: Json | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          created_at?: string;
+        };
+      };
+
+      // ------------------------------------------------------------------------
+      // Transitional Legacy Tables (Preserved for Non-Destructive Operation)
+      // ------------------------------------------------------------------------
       roles: {
         Row: {
           id: string;
@@ -118,7 +617,7 @@ export interface Database {
       };
       users: {
         Row: {
-          id: string; // references auth.users
+          id: string;
           email: string;
           full_name: string;
           office_id: string | null;
@@ -212,88 +711,6 @@ export interface Database {
           updated_at?: string;
         };
       };
-      gad_projects: {
-        Row: {
-          id: string;
-          program_id: string;
-          title: string;
-          description: string | null;
-          target_sector: string;
-          created_by: string;
-          updated_by: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          program_id: string;
-          title: string;
-          description?: string | null;
-          target_sector: string;
-          created_by: string;
-          updated_by?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          program_id?: string;
-          title?: string;
-          description?: string | null;
-          target_sector?: string;
-          created_by?: string;
-          updated_by?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-      };
-      gad_activities: {
-        Row: {
-          id: string;
-          project_id: string;
-          title: string;
-          description: string | null;
-          performance_indicator: string | null;
-          target_male: number;
-          target_female: number;
-          timeline_start: string | null;
-          timeline_end: string | null;
-          created_by: string;
-          updated_by: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          project_id: string;
-          title: string;
-          description?: string | null;
-          performance_indicator?: string | null;
-          target_male?: number;
-          target_female?: number;
-          timeline_start?: string | null;
-          timeline_end?: string | null;
-          created_by: string;
-          updated_by?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          project_id?: string;
-          title?: string;
-          description?: string | null;
-          performance_indicator?: string | null;
-          target_male?: number;
-          target_female?: number;
-          timeline_start?: string | null;
-          timeline_end?: string | null;
-          created_by?: string;
-          updated_by?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-      };
       budgets: {
         Row: {
           id: string;
@@ -359,44 +776,6 @@ export interface Database {
           office_id?: string;
           allocated_amount?: number;
           fund_source?: string;
-          created_by?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-      };
-      expenditures: {
-        Row: {
-          id: string;
-          activity_id: string;
-          allocation_id: string | null;
-          amount: number;
-          or_number: string | null;
-          disbursement_date: string;
-          particulars: string | null;
-          created_by: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          activity_id: string;
-          allocation_id?: string | null;
-          amount: number;
-          or_number?: string | null;
-          disbursement_date: string;
-          particulars?: string | null;
-          created_by: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          activity_id?: string;
-          allocation_id?: string | null;
-          amount?: number;
-          or_number?: string | null;
-          disbursement_date?: string;
-          particulars?: string | null;
           created_by?: string;
           created_at?: string;
           updated_at?: string;
