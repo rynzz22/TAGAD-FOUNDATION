@@ -5,6 +5,8 @@ import { AuditService } from './AuditService';
 import { Request } from 'express';
 import { FALLBACK_GAD_PLANS } from '../lib/fallbackStore';
 
+const MEMORY_GAD_PLANS: any[] = JSON.parse(JSON.stringify(FALLBACK_GAD_PLANS));
+
 export class GADPlanService {
   public static async getGADPlans(
     params: {
@@ -15,6 +17,35 @@ export class GADPlanService {
     },
     actorUser?: { id: string; role: Role; officeId: string | null }
   ) {
+    if (!isDatabaseConnected()) {
+      let filteredPlans = [...MEMORY_GAD_PLANS];
+      if (params.year) filteredPlans = filteredPlans.filter((p) => p.fiscalYear === Number(params.year));
+      if (params.officeId) filteredPlans = filteredPlans.filter((p) => p.officeId === params.officeId);
+      if (params.status) filteredPlans = filteredPlans.filter((p) => p.status === params.status);
+      if (actorUser && actorUser.role === Role.ENCODER && actorUser.officeId) {
+        filteredPlans = filteredPlans.filter((p) => p.officeId === actorUser.officeId);
+      }
+
+      const itemsFlat = filteredPlans.flatMap((plan) =>
+        (plan.items || []).map((item: any) => ({
+          ...item,
+          planId: plan.id,
+          year: plan.fiscalYear,
+          fiscalYear: plan.fiscalYear,
+          office: plan.office,
+          officeId: plan.officeId,
+          officeName: plan.officeName,
+          status: plan.status,
+          accomplishments: item.accomplishments || [],
+        }))
+      );
+
+      return {
+        plans: filteredPlans,
+        items: itemsFlat,
+      };
+    }
+
     const where: any = {};
 
     if (params.year) {
@@ -37,62 +68,175 @@ export class GADPlanService {
       where.officeId = actorUser.officeId;
     }
 
-    const plans = await prisma.gADPlan.findMany({
-      where,
-      include: {
-        office: { select: { id: true, code: true, name: true } },
-        createdBy: { select: { id: true, fullName: true } },
-        items: {
-          include: {
-            program: { select: { id: true, title: true } },
-            accomplishments: { include: { attachments: true } },
+    try {
+      const plans = await prisma.gADPlan.findMany({
+        where,
+        include: {
+          office: { select: { id: true, code: true, name: true } },
+          createdBy: { select: { id: true, fullName: true } },
+          items: {
+            include: {
+              program: { select: { id: true, title: true } },
+              accomplishments: { include: { attachments: true } },
+            },
+            orderBy: { createdAt: 'asc' },
           },
-          orderBy: { createdAt: 'asc' },
         },
-      },
-      orderBy: [{ fiscalYear: 'desc' }, { createdAt: 'desc' }],
-    });
+        orderBy: [{ fiscalYear: 'desc' }, { createdAt: 'desc' }],
+      });
 
-    // Flatten into item-level view for standard GPB consumption while retaining plan metadata
-    const itemsFlat = plans.flatMap((plan) => {
-      if (plan.items.length === 0) {
-        return [
-          {
-            id: plan.id,
-            planId: plan.id,
-            year: plan.fiscalYear,
-            fiscalYear: plan.fiscalYear,
-            office: plan.office.code || plan.office.name,
-            officeId: plan.officeId,
-            officeName: plan.office.name,
-            genderIssue: 'General Allocation',
-            causeOfIssue: '',
-            gadResult: 'Annual GAD Plan Allocation',
-            activity: 'GAD Direct and Attributed Activities',
-            performanceIndicator: '100% GAD compliance',
-            targetGroup: 'General Population',
-            timeline: `FY ${plan.fiscalYear}`,
-            responsibleOffice: plan.office.code || plan.office.name,
-            budget: Number(plan.gadBudget),
-            fundSource: 'General Fund (5% GAD)',
-            status: plan.status,
-            accomplishments: [],
-            createdAt: plan.createdAt,
-            updatedAt: plan.updatedAt,
+      // Flatten into item-level view for standard GPB consumption while retaining plan metadata
+      const itemsFlat = plans.flatMap((plan) => {
+        if (plan.items.length === 0) {
+          return [
+            {
+              id: plan.id,
+              planId: plan.id,
+              year: plan.fiscalYear,
+              fiscalYear: plan.fiscalYear,
+              office: plan.office.code || plan.office.name,
+              officeId: plan.officeId,
+              officeName: plan.office.name,
+              genderIssue: 'General Allocation',
+              causeOfIssue: '',
+              gadResult: 'Annual GAD Plan Allocation',
+              activity: 'GAD Direct and Attributed Activities',
+              performanceIndicator: '100% GAD compliance',
+              targetGroup: 'General Population',
+              timeline: `FY ${plan.fiscalYear}`,
+              responsibleOffice: plan.office.code || plan.office.name,
+              budget: Number(plan.gadBudget),
+              fundSource: 'General Fund (5% GAD)',
+              status: plan.status,
+              accomplishments: [],
+              createdAt: plan.createdAt,
+              updatedAt: plan.updatedAt,
+            },
+          ];
+        }
+
+        return plan.items.map((item) => ({
+          id: item.id,
+          planId: plan.id,
+          year: plan.fiscalYear,
+          fiscalYear: plan.fiscalYear,
+          office: plan.office.code || plan.office.name,
+          officeId: plan.officeId,
+          officeName: plan.office.name,
+          genderIssue: item.genderIssue,
+          causeOfIssue: item.causeOfIssue || '',
+          gadResult: item.gadResult,
+          activity: item.activity,
+          performanceIndicator: item.performanceIndicator,
+          targetGroup: item.targetGroup,
+          timeline: item.timeline,
+          responsibleOffice: item.responsibleOffice,
+          budget: Number(item.budget),
+          fundSource: item.fundSource,
+          hgdgScore: item.hgdgScore ? Number(item.hgdgScore) : null,
+          attributedPercentage: item.attributedPercentage ? Number(item.attributedPercentage) : null,
+          status: plan.status,
+          programId: item.programId,
+          programTitle: item.program?.title || null,
+          accomplishments: item.accomplishments.map((acc) => ({
+            ...acc,
+            actualBudgetUsed: Number(acc.actualBudgetUsed),
+          })),
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        }));
+      });
+
+      return {
+        plans: plans.map((p) => ({
+          ...p,
+          totalBudget: Number(p.totalBudget),
+          gadBudget: Number(p.gadBudget),
+          mandatoryGADPercentage: Number(p.mandatoryGADPercentage),
+        })),
+        items: itemsFlat,
+      };
+    } catch {
+      let filtered = [...MEMORY_GAD_PLANS];
+      if (params.year) filtered = filtered.filter((p) => p.fiscalYear === Number(params.year));
+      if (params.officeId) filtered = filtered.filter((p) => p.officeId === params.officeId);
+      if (params.status) filtered = filtered.filter((p) => p.status === params.status);
+      if (actorUser && actorUser.role === Role.ENCODER && actorUser.officeId) {
+        filtered = filtered.filter((p) => p.officeId === actorUser.officeId);
+      }
+      return {
+        plans: filtered,
+        items: filtered.flatMap((p) => p.items || []),
+      };
+    }
+  }
+
+  public static async getGADPlanById(id: string) {
+    if (!isDatabaseConnected()) {
+      const plan = MEMORY_GAD_PLANS.find((p) => p.id === id);
+      if (plan) return plan;
+      for (const p of MEMORY_GAD_PLANS) {
+        const item = (p.items || []).find((i: any) => i.id === id);
+        if (item) {
+          return {
+            ...item,
+            planId: p.id,
+            year: p.fiscalYear,
+            fiscalYear: p.fiscalYear,
+            office: p.office,
+            status: p.status,
+          };
+        }
+      }
+      throw new NotFoundError('GAD Plan or Item');
+    }
+
+    try {
+      // Check if ID is a plan ID or plan item ID
+      const plan = await prisma.gADPlan.findUnique({
+        where: { id },
+        include: {
+          office: true,
+          createdBy: true,
+          items: {
+            include: {
+              program: true,
+              accomplishments: { include: { attachments: true } },
+            },
           },
-        ];
+        },
+      });
+
+      if (plan) {
+        return {
+          ...plan,
+          totalBudget: Number(plan.totalBudget),
+          gadBudget: Number(plan.gadBudget),
+          mandatoryGADPercentage: Number(plan.mandatoryGADPercentage),
+        };
       }
 
-      return plan.items.map((item) => ({
+      const item = await prisma.gADPlanItem.findUnique({
+        where: { id },
+        include: {
+          gadPlan: { include: { office: true } },
+          program: true,
+          accomplishments: true,
+        },
+      });
+
+      if (!item) {
+        throw new NotFoundError('GAD Plan or Item');
+      }
+
+      return {
         id: item.id,
-        planId: plan.id,
-        year: plan.fiscalYear,
-        fiscalYear: plan.fiscalYear,
-        office: plan.office.code || plan.office.name,
-        officeId: plan.officeId,
-        officeName: plan.office.name,
+        planId: item.gadPlanId,
+        year: item.gadPlan.fiscalYear,
+        fiscalYear: item.gadPlan.fiscalYear,
+        office: item.gadPlan.office.code || item.gadPlan.office.name,
         genderIssue: item.genderIssue,
-        causeOfIssue: item.causeOfIssue || '',
+        causeOfIssue: item.causeOfIssue,
         gadResult: item.gadResult,
         activity: item.activity,
         performanceIndicator: item.performanceIndicator,
@@ -103,85 +247,29 @@ export class GADPlanService {
         fundSource: item.fundSource,
         hgdgScore: item.hgdgScore ? Number(item.hgdgScore) : null,
         attributedPercentage: item.attributedPercentage ? Number(item.attributedPercentage) : null,
-        status: plan.status,
+        status: item.gadPlan.status,
         programId: item.programId,
-        programTitle: item.program?.title || null,
-        accomplishments: item.accomplishments.map((acc) => ({
-          ...acc,
-          actualBudgetUsed: Number(acc.actualBudgetUsed),
-        })),
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      }));
-    });
-
-    return {
-      plans: plans.map((p) => ({
-        ...p,
-        totalBudget: Number(p.totalBudget),
-        gadBudget: Number(p.gadBudget),
-        mandatoryGADPercentage: Number(p.mandatoryGADPercentage),
-      })),
-      items: itemsFlat,
-    };
-  }
-
-  public static async getGADPlanById(id: string) {
-    // Check if ID is a plan ID or plan item ID
-    const plan = await prisma.gADPlan.findUnique({
-      where: { id },
-      include: {
-        office: true,
-        createdBy: true,
-        items: {
-          include: {
-            program: true,
-            accomplishments: { include: { attachments: true } },
-          },
-        },
-      },
-    });
-
-    if (plan) {
-      return {
-        ...plan,
-        totalBudget: Number(plan.totalBudget),
-        gadBudget: Number(plan.gadBudget),
-        mandatoryGADPercentage: Number(plan.mandatoryGADPercentage),
+        accomplishments: item.accomplishments,
       };
-    }
-
-    const item = await prisma.gADPlanItem.findUnique({
-      where: { id },
-      include: {
-        gadPlan: { include: { office: true } },
-        program: true,
-        accomplishments: true,
-      },
-    });
-
-    if (!item) {
+    } catch (err: any) {
+      if (err instanceof NotFoundError) throw err;
+      const plan = MEMORY_GAD_PLANS.find((p) => p.id === id);
+      if (plan) return plan;
+      for (const p of MEMORY_GAD_PLANS) {
+        const item = (p.items || []).find((i: any) => i.id === id);
+        if (item) {
+          return {
+            ...item,
+            planId: p.id,
+            year: p.fiscalYear,
+            fiscalYear: p.fiscalYear,
+            office: p.office,
+            status: p.status,
+          };
+        }
+      }
       throw new NotFoundError('GAD Plan or Item');
     }
-
-    return {
-      id: item.id,
-      planId: item.gadPlanId,
-      year: item.gadPlan.fiscalYear,
-      fiscalYear: item.gadPlan.fiscalYear,
-      office: item.gadPlan.office.code || item.gadPlan.office.name,
-      genderIssue: item.genderIssue,
-      causeOfIssue: item.causeOfIssue,
-      gadResult: item.gadResult,
-      activity: item.activity,
-      performanceIndicator: item.performanceIndicator,
-      targetGroup: item.targetGroup,
-      timeline: item.timeline,
-      responsibleOffice: item.responsibleOffice,
-      budget: Number(item.budget),
-      fundSource: item.fundSource,
-      status: item.gadPlan.status,
-    };
   }
 
   public static async createGADPlan(
@@ -193,7 +281,66 @@ export class GADPlanService {
 
     if (actorUser.role === Role.ENCODER) {
       effectiveOfficeId = actorUser.officeId;
-    } else if (!effectiveOfficeId && data.office) {
+    }
+
+    const fYear = parseInt(String(data.fiscalYear || data.year || new Date().getFullYear()), 10);
+    const itemBudget = parseFloat(String(data.budget || '0'));
+
+    if (!isDatabaseConnected()) {
+      let activePlan = MEMORY_GAD_PLANS.find((p) => p.officeId === effectiveOfficeId && p.fiscalYear === fYear);
+      if (!activePlan) {
+        activePlan = {
+          id: `plan-${Date.now()}`,
+          fiscalYear: fYear,
+          officeId: effectiveOfficeId || 'off-mswdo',
+          office: effectiveOfficeId || 'MSWDO',
+          officeName: 'Municipal Social Welfare and Development Office',
+          totalBudget: data.totalBudget ? parseFloat(String(data.totalBudget)) : itemBudget * 20,
+          gadBudget: itemBudget,
+          status: data.status || 'DRAFT',
+          items: [],
+        };
+        MEMORY_GAD_PLANS.unshift(activePlan);
+      } else if (itemBudget > 0) {
+        activePlan.gadBudget += itemBudget;
+      }
+
+      const createdItem = {
+        id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        gadPlanId: activePlan.id,
+        planId: activePlan.id,
+        genderIssue: data.genderIssue || 'Not Specified',
+        causeOfIssue: data.causeOfIssue || null,
+        gadResult: data.gadResult || 'Gender Equality Objective',
+        activity: data.activity || 'GAD Activity',
+        performanceIndicator: data.performanceIndicator || 'Target metrics accomplished',
+        targetGroup: data.targetGroup || 'General beneficiaries',
+        timeline: data.timeline || `FY ${fYear}`,
+        responsibleOffice: data.responsibleOffice || activePlan.office,
+        budget: itemBudget,
+        fundSource: data.fundSource || 'General Fund (5% GAD)',
+        status: activePlan.status,
+        year: fYear,
+        fiscalYear: fYear,
+        office: activePlan.office,
+        officeId: activePlan.officeId,
+      };
+
+      activePlan.items.push(createdItem);
+
+      await AuditService.logActionTx(null, {
+        userId: actorUser.id,
+        action: 'GAD_PLAN_ITEM_CREATED',
+        entityType: 'GADPlanItem',
+        entityId: createdItem.id,
+        afterState: createdItem,
+        req,
+      });
+
+      return createdItem;
+    }
+
+    if (!effectiveOfficeId && data.office) {
       const foundOffice = await prisma.office.findFirst({
         where: { OR: [{ code: data.office }, { name: data.office }] },
       });
@@ -204,9 +351,6 @@ export class GADPlanService {
       const defaultOffice = await prisma.office.findFirst();
       effectiveOfficeId = defaultOffice?.id;
     }
-
-    const fYear = parseInt(String(data.fiscalYear || data.year || new Date().getFullYear()), 10);
-    const itemBudget = parseFloat(String(data.budget || '0'));
 
     // Create or update plan and item in transaction
     const { plan, item } = await prisma.$transaction(async (tx) => {
@@ -295,6 +439,44 @@ export class GADPlanService {
     actorUser: { id: string; role: Role; officeId: string | null },
     req?: Request
   ) {
+    if (!isDatabaseConnected()) {
+      for (const p of MEMORY_GAD_PLANS) {
+        if (p.id === id) {
+          if (actorUser.role === Role.ENCODER && p.officeId !== actorUser.officeId) {
+            throw new OfficeScopeError('Encoders cannot modify GAD plans of other offices');
+          }
+          if (data.status) p.status = data.status;
+          await AuditService.logActionTx(null, {
+            userId: actorUser.id,
+            action: 'GAD_PLAN_UPDATED',
+            entityType: 'GADPlan',
+            entityId: id,
+            req,
+          });
+          return p;
+        }
+        const itemIdx = (p.items || []).findIndex((i: any) => i.id === id);
+        if (itemIdx !== -1) {
+          if (actorUser.role === Role.ENCODER && p.officeId !== actorUser.officeId) {
+            throw new OfficeScopeError('Encoders cannot modify GAD plans of other offices');
+          }
+          p.items[itemIdx] = { ...p.items[itemIdx], ...data };
+          if (data.status && actorUser.role === Role.ADMIN) {
+            p.status = data.status;
+          }
+          await AuditService.logActionTx(null, {
+            userId: actorUser.id,
+            action: 'GAD_PLAN_ITEM_UPDATED',
+            entityType: 'GADPlanItem',
+            entityId: id,
+            req,
+          });
+          return p.items[itemIdx];
+        }
+      }
+      throw new NotFoundError('GAD Plan or Item');
+    }
+
     // Check if ID refers to a GADPlanItem or a GADPlan
     const existingItem = await prisma.gADPlanItem.findUnique({
       where: { id },
@@ -432,6 +614,41 @@ export class GADPlanService {
       throw new ForbiddenError('Only administrators can approve GAD Plans');
     }
 
+    if (!isDatabaseConnected()) {
+      for (const p of MEMORY_GAD_PLANS) {
+        if (p.id === id) {
+          if (actorUser.role === Role.ENCODER && p.officeId !== actorUser.officeId) {
+            throw new OfficeScopeError('Encoders cannot modify plans of other offices');
+          }
+          p.status = status;
+          await AuditService.logActionTx(null, {
+            userId: actorUser.id,
+            action: 'GAD_PLAN_STATUS_CHANGED',
+            entityType: 'GADPlan',
+            entityId: id,
+            beforeState: { status: 'DRAFT' },
+            afterState: { status },
+            req,
+          });
+          return p;
+        }
+      }
+      // Or default first plan
+      if (MEMORY_GAD_PLANS.length > 0) {
+        MEMORY_GAD_PLANS[0].status = status;
+        await AuditService.logActionTx(null, {
+          userId: actorUser.id,
+          action: 'GAD_PLAN_STATUS_CHANGED',
+          entityType: 'GADPlan',
+          entityId: MEMORY_GAD_PLANS[0].id,
+          beforeState: { status: 'DRAFT' },
+          afterState: { status },
+          req,
+        });
+        return MEMORY_GAD_PLANS[0];
+      }
+    }
+
     // Resolve if ID is item or plan
     const item = await prisma.gADPlanItem.findUnique({
       where: { id },
@@ -477,6 +694,42 @@ export class GADPlanService {
     actorUser: { id: string; role: Role; officeId: string | null },
     req?: Request
   ) {
+    if (!isDatabaseConnected()) {
+      for (let i = 0; i < MEMORY_GAD_PLANS.length; i++) {
+        const p = MEMORY_GAD_PLANS[i];
+        if (p.id === id) {
+          if (actorUser.role === Role.ENCODER && p.officeId !== actorUser.officeId) {
+            throw new OfficeScopeError('Encoders cannot delete plans of other offices');
+          }
+          MEMORY_GAD_PLANS.splice(i, 1);
+          await AuditService.logActionTx(null, {
+            userId: actorUser.id,
+            action: 'GAD_PLAN_DELETED',
+            entityType: 'GADPlan',
+            entityId: id,
+            req,
+          });
+          return { message: 'Annual GAD Plan deleted' };
+        }
+        const itemIdx = (p.items || []).findIndex((it: any) => it.id === id);
+        if (itemIdx !== -1) {
+          if (actorUser.role === Role.ENCODER && p.officeId !== actorUser.officeId) {
+            throw new OfficeScopeError('Encoders cannot delete items belonging to other offices');
+          }
+          p.items.splice(itemIdx, 1);
+          await AuditService.logActionTx(null, {
+            userId: actorUser.id,
+            action: 'GAD_PLAN_ITEM_DELETED',
+            entityType: 'GADPlanItem',
+            entityId: id,
+            req,
+          });
+          return { message: 'GAD Plan line item deleted' };
+        }
+      }
+      return { message: 'GAD Plan item deleted' };
+    }
+
     // Check if it's an item
     const item = await prisma.gADPlanItem.findUnique({
       where: { id },

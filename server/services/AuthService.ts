@@ -37,6 +37,30 @@ const DEMO_USERS: any[] = [
     createdAt: new Date(),
   },
   {
+    id: 'usr-encoder-02',
+    email: 'mswdo@talibon.gov.ph',
+    fullName: 'MSWDO GAD Encoder',
+    role: 'ENCODER',
+    officeId: 'off-mswdo',
+    office: { id: 'off-mswdo', code: 'MSWDO', name: 'Municipal Social Welfare and Development Office' },
+    barangayId: null,
+    barangay: null,
+    isActive: true,
+    createdAt: new Date(),
+  },
+  {
+    id: 'usr-encoder-03',
+    email: 'encoder.mswdo@talibon.gov.ph',
+    fullName: 'MSWDO Secondary Encoder',
+    role: 'ENCODER',
+    officeId: 'off-mswdo',
+    office: { id: 'off-mswdo', code: 'MSWDO', name: 'Municipal Social Welfare and Development Office' },
+    barangayId: null,
+    barangay: null,
+    isActive: true,
+    createdAt: new Date(),
+  },
+  {
     id: 'usr-viewer-01',
     email: 'viewer@talibon.gov.ph',
     fullName: 'Municipal Auditor / Viewer',
@@ -118,7 +142,7 @@ export class AuthService {
 
     // Fallback demo authentication
     const demoUser = DEMO_USERS.find((u) => u.email === cleanEmail);
-    if (demoUser && (passwordPlain === 'Admin@1234' || passwordPlain === 'password' || passwordPlain.length >= 6)) {
+    if (demoUser && (passwordPlain === 'Admin@1234' || passwordPlain === 'Password123!' || passwordPlain === 'password' || passwordPlain === 'demo1234')) {
       const tokenPayload = {
         id: demoUser.id,
         email: demoUser.email,

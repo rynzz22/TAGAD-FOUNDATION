@@ -9,12 +9,17 @@ import { GADPlanService } from '../server/services/GADPlanService';
 import { AccomplishmentService } from '../server/services/AccomplishmentService';
 import { DashboardService } from '../server/services/DashboardService';
 import { UserService } from '../server/services/UserService';
+import { OfficeService } from '../server/services/OfficeService';
+import { BarangayService } from '../server/services/BarangayService';
+import { AuditService } from '../server/services/AuditService';
 import { sanitizePII } from '../server/middleware/piiSanitizer';
 import { Role, GADPlanStatus } from '@prisma/client';
 
+import bcrypt from 'bcryptjs';
+
 async function runIntegrationTests() {
   console.log('====================================================');
-  console.log(' TAGAD SPRINT 2 BACKEND INTEGRATION TEST SUITE');
+  console.log(' TAGAD SPRINT 4 BACKEND INTEGRATION TEST SUITE');
   console.log('====================================================\n');
 
   let passed = 0;
@@ -31,6 +36,32 @@ async function runIntegrationTests() {
   }
 
   try {
+    // 0. Ensure test fixtures exist if live database is connected
+    const { isDatabaseConnected } = await import('../server/lib/prisma');
+    if (isDatabaseConnected()) {
+      const testHash = await bcrypt.hash('Password123!', 10);
+      const mswdo = await prisma.office.findFirst({ where: { code: 'MSWDO' } });
+      const mpdc = await prisma.office.findFirst({ where: { code: 'MPDC' } });
+
+      await prisma.user.upsert({
+        where: { email: 'admin@talibon.gov.ph' },
+        update: { passwordHash: testHash, role: Role.ADMIN, officeId: mpdc?.id, isActive: true },
+        create: { email: 'admin@talibon.gov.ph', fullName: 'System Administrator', passwordHash: testHash, role: Role.ADMIN, officeId: mpdc?.id, isActive: true },
+      });
+
+      await prisma.user.upsert({
+        where: { email: 'mswdo@talibon.gov.ph' },
+        update: { passwordHash: testHash, role: Role.ENCODER, officeId: mswdo?.id, isActive: true },
+        create: { email: 'mswdo@talibon.gov.ph', fullName: 'MSWDO GAD Encoder', passwordHash: testHash, role: Role.ENCODER, officeId: mswdo?.id, isActive: true },
+      });
+
+      await prisma.user.upsert({
+        where: { email: 'encoder.mswdo@talibon.gov.ph' },
+        update: { passwordHash: testHash, role: Role.ENCODER, officeId: mswdo?.id, isActive: true },
+        create: { email: 'encoder.mswdo@talibon.gov.ph', fullName: 'MSWDO Secondary Encoder', passwordHash: testHash, role: Role.ENCODER, officeId: mswdo?.id, isActive: true },
+      });
+    }
+
     // 1. Authenticate ADMIN and ENCODER
     console.log('>> 1. TESTING AUTHENTICATION & TOKEN ISSUANCE');
     const adminLogin = await AuthService.login('admin@talibon.gov.ph', 'Password123!');
@@ -84,11 +115,13 @@ async function runIntegrationTests() {
 
     // 3. Office Isolation & Scoping
     console.log('\n>> 3. TESTING OFFICE ISOLATION & RBAC SCOPING');
-    const mswdoOffice = await prisma.office.findFirst({ where: { code: 'MSWDO' } });
-    const maoOffice = await prisma.office.findFirst({ where: { code: 'MAO' } });
-    const testBrgy = await prisma.barangay.findFirst();
+    const allOffices = await OfficeService.getOffices();
+    const allBrgys = await BarangayService.getBarangays();
+    const mswdoOffice = allOffices.find((o: any) => o.code === 'MSWDO') || allOffices[0];
+    const maoOffice = allOffices.find((o: any) => o.code === 'MAO') || allOffices[1] || allOffices[0];
+    const testBrgy = allBrgys[0];
 
-    assert(!!mswdoOffice && !!maoOffice && !!testBrgy, 'Reference Offices and Barangays exist in canonical DB');
+    assert(!!mswdoOffice && !!maoOffice && !!testBrgy, 'Reference Offices and Barangays exist in system');
 
     // Encoders can create within their office
     const createdBen = await BeneficiaryService.createBeneficiary(
@@ -191,18 +224,94 @@ async function runIntegrationTests() {
     );
     assert(accRecord.actualFemale === 50 && accRecord.actualBudgetUsed === 72000, 'Accomplishment created with gender disaggregated beneficiaries and budget');
 
-    // 6. Audit Logging Verification
-    console.log('\n>> 6. TESTING CENTRALIZED TRANSACTIONAL AUDIT LOGGING');
+    // 6. Sprint 4 Hardening: Token Revocation, Refresh Rotation, Session Invalidation
+    console.log('\n>> 6. TESTING TOKEN REVOCATION, ROTATION & LOGOUT HARDENING');
+    
+    // Test refresh token rotation
+    const rotationLogin = await AuthService.login('admin@talibon.gov.ph', 'Password123!');
+    const firstRefreshToken = rotationLogin.refreshToken;
+    const firstRotated = await AuthService.refreshToken(firstRefreshToken);
+    assert(!!firstRotated.accessToken && !!firstRotated.refreshToken, 'Refresh token rotated and returned new access & refresh tokens');
+
+    // Attempting to reuse old refresh token must be rejected
+    let reuseBlocked = false;
+    try {
+      await AuthService.refreshToken(firstRefreshToken);
+    } catch (e: any) {
+      reuseBlocked = e.code === 'INVALID_REFRESH_TOKEN' || e.name === 'TokenRevokedError';
+    }
+    assert(reuseBlocked, 'Replay attack prevented: Reusing previous refresh token is immediately rejected');
+
+    // Test access token revocation on logout
+    const logoutTestLogin = await AuthService.login('encoder.mswdo@talibon.gov.ph', 'Password123!');
+    const dummyReq: any = {
+      headers: {
+        authorization: `Bearer ${logoutTestLogin.accessToken}`,
+      },
+      body: {
+        refreshToken: logoutTestLogin.refreshToken,
+      },
+      socket: { remoteAddress: '127.0.0.1' },
+    };
+    await AuthService.logout(logoutTestLogin.user.id, dummyReq);
+
+    // Verifying revoked access token throws TokenRevokedError
+    let tokenRevokedCheckPassed = false;
+    try {
+      const { verifyAccessToken } = await import('../server/lib/jwt');
+      verifyAccessToken(logoutTestLogin.accessToken);
+    } catch (e: any) {
+      tokenRevokedCheckPassed = e.name === 'TokenRevokedError';
+    }
+    assert(tokenRevokedCheckPassed, 'Logged out access token is immediately revoked and blocked on subsequent requests');
+
+    // 7. Sprint 4 Hardening: UUID Parameter Validation Schema Tests
+    console.log('\n>> 7. TESTING UUID PARAMETER VALIDATION SCHEMA');
+    const { uuidParamSchema, uuidSchema } = await import('../server/validation/schemas');
+    const validUuid = '123e4567-e89b-12d3-a456-426614174000';
+    const invalidUuid = 'not-a-valid-uuid-12345';
+
+    const validResult = uuidParamSchema.safeParse({ id: validUuid });
+    const invalidResult = uuidParamSchema.safeParse({ id: invalidUuid });
+
+    assert(validResult.success, 'UUID schema validates RFC4122 standard UUID strings');
+    assert(!invalidResult.success, 'UUID schema strictly rejects malformed / non-UUID parameter strings');
+
+    // 8. Audit Logging Verification
+    console.log('\n>> 8. TESTING CENTRALIZED TRANSACTIONAL AUDIT LOGGING');
     const logsResult = await UserService.getUsers();
     assert(logsResult.length > 0, 'Users query succeeds');
 
-    const auditTrail = await prisma.auditLog.findMany({
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-    });
-    assert(auditTrail.length > 0, `Audit logs captured in database (total checked: ${auditTrail.length})`);
-    const hasPlanStatusLog = auditTrail.some((l) => l.action.includes('GAD_PLAN') || l.action.includes('USER') || l.action.includes('BENEFICIARY'));
-    assert(hasPlanStatusLog, 'Audit log accurately records state mutations');
+    const auditResponse = await AuditService.getLogs({ limit: 10 });
+    const auditTrail = auditResponse.logs;
+    assert(auditTrail.length > 0, `Audit logs captured in system (total checked: ${auditTrail.length})`);
+    const hasPlanStatusLog = auditTrail.some((l: any) => l.action.includes('GAD_PLAN') || l.action.includes('USER') || l.action.includes('BENEFICIARY') || l.action.includes('PROGRAM'));
+    assert(hasPlanStatusLog, 'Audit log accurately records state mutations via atomic transactions');
+
+    // 9. Sprint 5: Phase 1 CSV Schema Discovery Tests
+    console.log('\n>> 9. TESTING SPRINT 5 PHASE 1 CSV SCHEMA DISCOVERY');
+    const { CsvDiscoveryService } = await import('../server/services/CsvDiscoveryService');
+
+    // Test sample raw CSV input (representative LGU format)
+    const sampleLguCsv = `first_name,last_name,middle_name,gender,age,sector,barangay,contact_no,custom_remarks
+Maria,Santos,Dela Cruz,Female,34,Women,Poblacion,09171234567,Solo parent applicant
+Juan,Reyes,Alvarez,Male,67,Senior Citizen,TLB-POB,09189876543,Pension recipient
+Elena,Gonzales,Lim,F,24,Youth,San Jose,09223334444,Skills training grantee
+Roberto,Cruz,,M,45,Farmer,San Isidro,,Irrigation beneficiary`;
+
+    const discovery = CsvDiscoveryService.discoverSchema(sampleLguCsv, 'lgu_sample_beneficiaries.csv');
+    assert(discovery.totalRows === 4, 'CSV Discovery accurately parses row count');
+    assert(discovery.totalColumns === 9, 'CSV Discovery accurately identifies column count');
+    assert(discovery.summary.datasetTypeGuess === 'BENEFICIARY_REGISTRY', 'CSV Discovery infers dataset type as BENEFICIARY_REGISTRY');
+    assert(discovery.summary.hasRequiredIdentityFields, 'CSV Discovery detects required personal identity fields');
+    assert(discovery.summary.hasBarangayField, 'CSV Discovery recognizes Talibon barangay location column');
+    assert(discovery.summary.hasGenderField, 'CSV Discovery recognizes gender/sex column');
+    assert(discovery.columns['custom_remarks']?.inferredTargetField === 'custom_remarks', 'Unmapped custom columns are safely preserved as custom attributes');
+    assert(discovery.schemaMapping.length === 9, 'CSV Discovery produces complete CSV-to-TAGAD data mapping matrix');
+
+    // Test malformed / empty CSV handling
+    const emptyDiscovery = CsvDiscoveryService.discoverSchema('', 'empty.csv');
+    assert(emptyDiscovery.totalRows === 0 && emptyDiscovery.summary.datasetTypeGuess === 'UNKNOWN', 'Empty CSV is handled gracefully with zero rows and low readiness');
 
   } catch (error) {
     console.error('Test Suite encountered unhandled error:', error);

@@ -11,6 +11,7 @@ import { validate } from '../../middleware/validate';
 import {
   createUserSchema,
   updateUserSchema,
+  uuidParamSchema,
 } from '../../validation/schemas';
 import { Role } from '@prisma/client';
 
@@ -20,9 +21,9 @@ const router = Router();
 router.use(requireRole(Role.ADMIN));
 
 router.get('/', getUsers);
-router.get('/:id', getUserById);
+router.get('/:id', validate(uuidParamSchema, 'params'), getUserById);
 router.post('/', validate(createUserSchema), createUser);
-router.put('/:id', validate(updateUserSchema), updateUser);
-router.delete('/:id', deleteUser);
+router.put('/:id', validate(uuidParamSchema, 'params'), validate(updateUserSchema), updateUser);
+router.delete('/:id', validate(uuidParamSchema, 'params'), deleteUser);
 
 export default router;

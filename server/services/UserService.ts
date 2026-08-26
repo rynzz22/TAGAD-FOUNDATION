@@ -158,6 +158,35 @@ export class UserService {
   }
 
   public static async createUser(data: any, actorUserId?: string, req?: Request) {
+    if (!isDatabaseConnected()) {
+      const newUser = {
+        id: `usr-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        email: data.email.toLowerCase().trim(),
+        fullName: data.fullName || data.name || 'System User',
+        role: data.role || 'ENCODER',
+        officeId: data.officeId || 'off-mswdo',
+        barangayId: data.barangayId || null,
+        isActive: true,
+        createdAt: new Date(),
+        office: { id: 'off-mswdo', code: 'MSWDO', name: 'Municipal Social Welfare and Development Office' },
+        barangay: null,
+      };
+      DEMO_USERS_LIST.unshift(newUser);
+      await AuditService.logActionTx(null, {
+        userId: actorUserId,
+        action: 'USER_CREATED',
+        entityType: 'User',
+        entityId: newUser.id,
+        afterState: newUser,
+        req,
+      });
+      return {
+        ...newUser,
+        name: newUser.fullName,
+        office: newUser.office?.code || newUser.office?.name || '',
+      };
+    }
+
     const existing = await prisma.user.findUnique({
       where: { email: data.email.toLowerCase().trim() },
     });
@@ -177,32 +206,38 @@ export class UserService {
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    const user = await prisma.user.create({
-      data: {
-        email: data.email.toLowerCase().trim(),
-        passwordHash: hashedPassword,
-        fullName: data.fullName || data.name || 'System User',
-        role: (data.role as Role) || Role.ENCODER,
-        officeId: resolvedOfficeId || null,
-        barangayId: data.barangayId || null,
-        isActive: true,
-      },
-      include: {
-        office: true,
-        barangay: true,
-      },
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          email: data.email.toLowerCase().trim(),
+          passwordHash: hashedPassword,
+          fullName: data.fullName || data.name || 'System User',
+          role: (data.role as Role) || Role.ENCODER,
+          officeId: resolvedOfficeId || null,
+          barangayId: data.barangayId || null,
+          isActive: true,
+        },
+        include: {
+          office: true,
+          barangay: true,
+        },
+      });
+
+      const { passwordHash: _, ...safeUser } = created;
+
+      await AuditService.logActionTx(tx, {
+        userId: actorUserId,
+        action: 'USER_CREATED',
+        entityType: 'User',
+        entityId: created.id,
+        afterState: safeUser,
+        req,
+      });
+
+      return created;
     });
 
     const { passwordHash: _, ...safeUser } = user;
-
-    await AuditService.logAction({
-      userId: actorUserId,
-      action: 'USER_CREATED',
-      entityType: 'User',
-      entityId: user.id,
-      afterState: safeUser,
-      req,
-    });
 
     return {
       ...safeUser,
@@ -212,6 +247,24 @@ export class UserService {
   }
 
   public static async updateUser(id: string, data: any, actorUserId?: string, req?: Request) {
+    if (!isDatabaseConnected()) {
+      const idx = DEMO_USERS_LIST.findIndex((u) => u.id === id || u.email === id);
+      if (idx === -1) throw new NotFoundError('User');
+      DEMO_USERS_LIST[idx] = { ...DEMO_USERS_LIST[idx], ...data };
+      await AuditService.logActionTx(null, {
+        userId: actorUserId,
+        action: 'USER_UPDATED',
+        entityType: 'User',
+        entityId: id,
+        req,
+      });
+      return {
+        ...DEMO_USERS_LIST[idx],
+        name: DEMO_USERS_LIST[idx].fullName,
+        office: DEMO_USERS_LIST[idx].office?.code || '',
+      };
+    }
+
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundError('User');
@@ -229,51 +282,71 @@ export class UserService {
       updateData.passwordHash = await bcrypt.hash(data.password, 10);
     }
 
-    const updated = await prisma.user.update({
-      where: { id },
-      data: updateData,
-      include: { office: true, barangay: true },
-    });
+    const { safeUpdated } = await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id },
+        data: updateData,
+        include: { office: true, barangay: true },
+      });
 
-    const { passwordHash: _, ...safeUpdated } = updated;
-    const { passwordHash: __, ...safeExisting } = existing;
+      const { passwordHash: _, ...safeUp } = updated;
+      const { passwordHash: __, ...safeExisting } = existing;
 
-    await AuditService.logAction({
-      userId: actorUserId,
-      action: 'USER_UPDATED',
-      entityType: 'User',
-      entityId: updated.id,
-      beforeState: safeExisting,
-      afterState: safeUpdated,
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUserId,
+        action: 'USER_UPDATED',
+        entityType: 'User',
+        entityId: updated.id,
+        beforeState: safeExisting,
+        afterState: safeUp,
+        req,
+      });
+
+      return { safeUpdated: safeUp, fullUpdated: updated };
     });
 
     return {
       ...safeUpdated,
-      name: updated.fullName,
-      office: updated.office?.code || updated.office?.name || '',
+      name: safeUpdated.fullName,
+      office: safeUpdated.office?.code || safeUpdated.office?.name || '',
     };
   }
 
   public static async deactivateUser(id: string, actorUserId?: string, req?: Request) {
+    if (!isDatabaseConnected()) {
+      const idx = DEMO_USERS_LIST.findIndex((u) => u.id === id || u.email === id);
+      if (idx === -1) throw new NotFoundError('User');
+      DEMO_USERS_LIST[idx].isActive = false;
+      await AuditService.logActionTx(null, {
+        userId: actorUserId,
+        action: 'USER_DEACTIVATED',
+        entityType: 'User',
+        entityId: id,
+        req,
+      });
+      return { message: 'User account deactivated successfully' };
+    }
+
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundError('User');
     }
 
-    const updated = await prisma.user.update({
-      where: { id },
-      data: { isActive: false },
-    });
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data: { isActive: false },
+      });
 
-    await AuditService.logAction({
-      userId: actorUserId,
-      action: 'USER_DEACTIVATED',
-      entityType: 'User',
-      entityId: id,
-      beforeState: { isActive: true },
-      afterState: { isActive: false },
-      req,
+      await AuditService.logActionTx(tx, {
+        userId: actorUserId,
+        action: 'USER_DEACTIVATED',
+        entityType: 'User',
+        entityId: id,
+        beforeState: { isActive: true },
+        afterState: { isActive: false },
+        req,
+      });
     });
 
     return { message: 'User account deactivated successfully' };

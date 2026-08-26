@@ -5,6 +5,8 @@ import { AuditService } from './AuditService';
 import { Request } from 'express';
 import { getFallbackDemographicsData } from '../lib/fallbackStore';
 
+const MEMORY_BENEFICIARIES: any[] = [];
+
 export class BeneficiaryService {
   public static async getBeneficiaries(
     params: {
@@ -24,6 +26,37 @@ export class BeneficiaryService {
     const page = Number(params.page) || 1;
     const limit = Number(params.limit) || 10;
     const skip = (page - 1) * limit;
+
+    if (!isDatabaseConnected()) {
+      let filtered = [...MEMORY_BENEFICIARIES];
+      if (params.isArchived !== undefined) {
+        filtered = filtered.filter((b) => b.isArchived === params.isArchived);
+      }
+      if (params.sex) {
+        filtered = filtered.filter((b) => b.sex === params.sex);
+      }
+      if (params.sector) {
+        filtered = filtered.filter((b) => b.sector === params.sector);
+      }
+      if (params.officeId) {
+        filtered = filtered.filter((b) => b.officeId === params.officeId);
+      }
+      if (params.search) {
+        const s = params.search.toLowerCase();
+        filtered = filtered.filter((b) => b.firstName?.toLowerCase().includes(s) || b.lastName?.toLowerCase().includes(s));
+      }
+      const total = filtered.length;
+      const data = filtered.slice(skip, skip + limit);
+      return {
+        data,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit) || 1,
+        },
+      };
+    }
 
     const where: any = {
       isArchived: params.isArchived !== undefined ? params.isArchived : false,
@@ -63,65 +96,109 @@ export class BeneficiaryService {
       where.createdAt = { gte: yearStart, lte: yearEnd };
     }
 
-    const [total, beneficiaries] = await Promise.all([
-      prisma.beneficiary.count({ where }),
-      prisma.beneficiary.findMany({
-        where,
-        include: {
-          barangay: { select: { id: true, name: true, code: true } },
-          office: { select: { id: true, name: true, code: true } },
-          encodedBy: { select: { id: true, fullName: true } },
+    try {
+      const [total, beneficiaries] = await Promise.all([
+        prisma.beneficiary.count({ where }),
+        prisma.beneficiary.findMany({
+          where,
+          include: {
+            barangay: { select: { id: true, name: true, code: true } },
+            office: { select: { id: true, name: true, code: true } },
+            encodedBy: { select: { id: true, fullName: true } },
+          },
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]);
+
+      const formatted = beneficiaries.map((b) => ({
+        ...b,
+        barangay: b.barangay.name,
+        office: b.office?.code || b.office?.name || '',
+        program: 'General GAD',
+        dateEncoded: b.createdAt,
+        encodedBy: b.encodedBy?.fullName || 'System',
+      }));
+
+      return {
+        data: formatted,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit) || 1,
         },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-    ]);
-
-    const formatted = beneficiaries.map((b) => ({
-      ...b,
-      barangay: b.barangay.name,
-      office: b.office?.code || b.office?.name || '',
-      program: 'General GAD',
-      dateEncoded: b.createdAt,
-      encodedBy: b.encodedBy?.fullName || 'System',
-    }));
-
-    return {
-      data: formatted,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+      };
+    } catch {
+      let filtered = [...MEMORY_BENEFICIARIES];
+      if (params.isArchived !== undefined) {
+        filtered = filtered.filter((b) => b.isArchived === params.isArchived);
+      }
+      if (params.sex) {
+        filtered = filtered.filter((b) => b.sex === params.sex);
+      }
+      if (params.sector) {
+        filtered = filtered.filter((b) => b.sector === params.sector);
+      }
+      if (params.officeId) {
+        filtered = filtered.filter((b) => b.officeId === params.officeId);
+      }
+      if (params.search) {
+        const s = params.search.toLowerCase();
+        filtered = filtered.filter((b) => b.firstName?.toLowerCase().includes(s) || b.lastName?.toLowerCase().includes(s));
+      }
+      const total = filtered.length;
+      const data = filtered.slice(skip, skip + limit);
+      return {
+        data,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit) || 1,
+        },
+      };
+    }
   }
 
   public static async getBeneficiaryById(
     id: string,
     actorUser?: { id: string; role: Role; officeId: string | null }
   ) {
-    const beneficiary = await prisma.beneficiary.findUnique({
-      where: { id },
-      include: {
-        barangay: true,
-        office: true,
-        household: true,
-        encodedBy: { select: { id: true, fullName: true, email: true } },
-      },
-    });
-
-    if (!beneficiary) {
-      throw new NotFoundError('Beneficiary');
+    if (!isDatabaseConnected()) {
+      const ben = MEMORY_BENEFICIARIES.find((b) => b.id === id);
+      if (!ben) throw new NotFoundError('Beneficiary');
+      return ben;
     }
 
-    return {
-      ...beneficiary,
-      barangay: beneficiary.barangay.name,
-      office: beneficiary.office?.code || beneficiary.office?.name || '',
-      dateEncoded: beneficiary.createdAt,
-    };
+    try {
+      const beneficiary = await prisma.beneficiary.findUnique({
+        where: { id },
+        include: {
+          barangay: true,
+          office: true,
+          household: true,
+          encodedBy: { select: { id: true, fullName: true, email: true } },
+        },
+      });
+
+      if (!beneficiary) {
+        throw new NotFoundError('Beneficiary');
+      }
+
+      return {
+        ...beneficiary,
+        barangay: beneficiary.barangay.name,
+        office: beneficiary.office?.code || beneficiary.office?.name || '',
+        dateEncoded: beneficiary.createdAt,
+      };
+    } catch (err: any) {
+      if (err instanceof NotFoundError) throw err;
+      const ben = MEMORY_BENEFICIARIES.find((b) => b.id === id);
+      if (!ben) throw new NotFoundError('Beneficiary');
+      return ben;
+    }
   }
 
   public static async createBeneficiary(
@@ -133,7 +210,43 @@ export class BeneficiaryService {
 
     if (actorUser.role === Role.ENCODER) {
       effectiveOfficeId = actorUser.officeId;
-    } else if (!effectiveOfficeId && data.office) {
+    }
+
+    if (!isDatabaseConnected()) {
+      const created = {
+        id: `ben-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        middleName: data.middleName ? data.middleName.trim() : null,
+        sex: (data.sex?.toUpperCase() as Sex) || Sex.FEMALE,
+        age: parseInt(String(data.age || '0'), 10),
+        sector: data.sector || 'General',
+        barangayId: data.barangayId || 'brgy-pob',
+        barangay: 'Poblacion',
+        officeId: effectiveOfficeId || null,
+        office: effectiveOfficeId || '',
+        householdId: data.householdId || null,
+        contactNumber: data.contactNumber || null,
+        addressStreet: data.addressStreet || null,
+        birthdate: data.birthdate ? new Date(data.birthdate) : null,
+        encodedById: actorUser.id,
+        isArchived: false,
+        createdAt: new Date(),
+        dateEncoded: new Date(),
+      };
+      MEMORY_BENEFICIARIES.unshift(created);
+      await AuditService.logActionTx(null, {
+        userId: actorUser.id,
+        action: 'BENEFICIARY_CREATED',
+        entityType: 'Beneficiary',
+        entityId: created.id,
+        afterState: { id: created.id, sex: created.sex, sector: created.sector },
+        req,
+      });
+      return created;
+    }
+
+    if (!effectiveOfficeId && data.office) {
       const foundOffice = await prisma.office.findFirst({
         where: { OR: [{ code: data.office }, { name: data.office }] },
       });
@@ -209,6 +322,24 @@ export class BeneficiaryService {
     actorUser: { id: string; role: Role; officeId: string | null },
     req?: Request
   ) {
+    if (!isDatabaseConnected()) {
+      const idx = MEMORY_BENEFICIARIES.findIndex((b) => b.id === id);
+      if (idx === -1) throw new NotFoundError('Beneficiary');
+      const existing = MEMORY_BENEFICIARIES[idx];
+      if (actorUser.role === Role.ENCODER && existing.officeId && existing.officeId !== actorUser.officeId) {
+        throw new OfficeScopeError('Encoders cannot modify beneficiaries encoded under other offices');
+      }
+      MEMORY_BENEFICIARIES[idx] = { ...existing, ...data };
+      await AuditService.logActionTx(null, {
+        userId: actorUser.id,
+        action: 'BENEFICIARY_UPDATED',
+        entityType: 'Beneficiary',
+        entityId: id,
+        req,
+      });
+      return MEMORY_BENEFICIARIES[idx];
+    }
+
     const existing = await prisma.beneficiary.findUnique({
       where: { id },
       include: { barangay: true, office: true },
@@ -281,6 +412,24 @@ export class BeneficiaryService {
     actorUser: { id: string; role: Role; officeId: string | null },
     req?: Request
   ) {
+    if (!isDatabaseConnected()) {
+      const idx = MEMORY_BENEFICIARIES.findIndex((b) => b.id === id);
+      if (idx === -1) throw new NotFoundError('Beneficiary');
+      const existing = MEMORY_BENEFICIARIES[idx];
+      if (actorUser.role === Role.ENCODER && existing.officeId && existing.officeId !== actorUser.officeId) {
+        throw new OfficeScopeError('Encoders cannot archive beneficiaries under other offices');
+      }
+      MEMORY_BENEFICIARIES[idx].isArchived = true;
+      await AuditService.logActionTx(null, {
+        userId: actorUser.id,
+        action: 'BENEFICIARY_ARCHIVED',
+        entityType: 'Beneficiary',
+        entityId: id,
+        req,
+      });
+      return { message: 'Beneficiary record archived successfully' };
+    }
+
     const existing = await prisma.beneficiary.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundError('Beneficiary');

@@ -11,6 +11,7 @@ import {
   createAccomplishmentSchema,
   updateAccomplishmentSchema,
   paginationQuerySchema,
+  uuidParamSchema,
 } from '../../validation/schemas';
 import { Role } from '@prisma/client';
 
@@ -28,6 +29,7 @@ router.put(
   '/:id',
   requireRole(Role.ADMIN, Role.ENCODER),
   requireOfficeScope(),
+  validate(uuidParamSchema, 'params'),
   validate(updateAccomplishmentSchema),
   updateAccomplishment
 );
@@ -35,6 +37,7 @@ router.delete(
   '/:id',
   requireRole(Role.ADMIN, Role.ENCODER),
   requireOfficeScope(),
+  validate(uuidParamSchema, 'params'),
   deleteAccomplishment
 );
 

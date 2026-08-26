@@ -12,13 +12,14 @@ import {
   createProgramSchema,
   updateProgramSchema,
   paginationQuerySchema,
+  uuidParamSchema,
 } from '../../validation/schemas';
 import { Role } from '@prisma/client';
 
 const router = Router();
 
 router.get('/', validate(paginationQuerySchema, 'query'), getPrograms);
-router.get('/:id', getProgramById);
+router.get('/:id', validate(uuidParamSchema, 'params'), getProgramById);
 router.post(
   '/',
   requireRole(Role.ADMIN, Role.ENCODER),
@@ -30,6 +31,7 @@ router.put(
   '/:id',
   requireRole(Role.ADMIN, Role.ENCODER),
   requireOfficeScope(),
+  validate(uuidParamSchema, 'params'),
   validate(updateProgramSchema),
   updateProgram
 );
@@ -37,6 +39,7 @@ router.delete(
   '/:id',
   requireRole(Role.ADMIN, Role.ENCODER),
   requireOfficeScope(),
+  validate(uuidParamSchema, 'params'),
   deleteProgram
 );
 

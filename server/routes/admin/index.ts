@@ -10,6 +10,7 @@ import userRoutes from './users';
 import auditLogRoutes from './auditLogs';
 import officeRoutes from './offices';
 import barangayRoutes from './barangays';
+import ingestionRoutes from './ingestion';
 
 const router = Router();
 
@@ -28,5 +29,6 @@ router.use('/users', userRoutes);
 router.use('/audit-logs', auditLogRoutes);
 router.use('/offices', officeRoutes);
 router.use('/barangays', barangayRoutes);
+router.use('/ingestion', ingestionRoutes);
 
 export default router;

@@ -5,6 +5,8 @@ import { AuditService } from './AuditService';
 import { Request } from 'express';
 import { FALLBACK_ACCOMPLISHMENTS } from '../lib/fallbackStore';
 
+const MEMORY_ACCOMPLISHMENTS: any[] = JSON.parse(JSON.stringify(FALLBACK_ACCOMPLISHMENTS));
+
 export class AccomplishmentService {
   public static async getAccomplishments(
     params: {
@@ -15,6 +17,13 @@ export class AccomplishmentService {
     },
     actorUser?: { id: string; role: Role; officeId: string | null }
   ) {
+    if (!isDatabaseConnected()) {
+      let filtered = [...MEMORY_ACCOMPLISHMENTS];
+      if (params.year) filtered = filtered.filter((a) => a.fiscalYear === Number(params.year));
+      if (params.quarter) filtered = filtered.filter((a) => a.quarter === Number(params.quarter));
+      return filtered;
+    }
+
     const where: any = {};
 
     if (params.year) {
@@ -39,43 +48,50 @@ export class AccomplishmentService {
       ];
     }
 
-    const accs = await prisma.gADAccomplishment.findMany({
-      where,
-      include: {
-        program: { include: { office: true } },
-        gadPlanItem: { include: { gadPlan: { include: { office: true } } } },
-        attachments: true,
-        createdBy: { select: { id: true, fullName: true } },
-      },
-      orderBy: [{ fiscalYear: 'desc' }, { quarter: 'desc' }, { createdAt: 'desc' }],
-    });
+    try {
+      const accs = await prisma.gADAccomplishment.findMany({
+        where,
+        include: {
+          program: { include: { office: true } },
+          gadPlanItem: { include: { gadPlan: { include: { office: true } } } },
+          attachments: true,
+          createdBy: { select: { id: true, fullName: true } },
+        },
+        orderBy: [{ fiscalYear: 'desc' }, { quarter: 'desc' }, { createdAt: 'desc' }],
+      });
 
-    return accs.map((acc) => ({
-      ...acc,
-      actualBudgetUsed: Number(acc.actualBudgetUsed),
-      actualBeneficiaryMale: acc.actualMale,
-      actualBeneficiaryFemale: acc.actualFemale,
-      createdByName: acc.createdBy?.fullName || 'System',
-      gadPlan: acc.gadPlanItem
-        ? {
-            id: acc.gadPlanItem.id,
-            year: acc.gadPlanItem.gadPlan.fiscalYear,
-            office: acc.gadPlanItem.gadPlan.office.code || acc.gadPlanItem.gadPlan.office.name,
-            activity: acc.gadPlanItem.activity,
-            performanceIndicator: acc.gadPlanItem.performanceIndicator,
-            budget: Number(acc.gadPlanItem.budget),
-          }
-        : acc.program
-        ? {
-            id: acc.program.id,
-            year: acc.program.fiscalYear,
-            office: acc.program.office.code || acc.program.office.name,
-            activity: acc.program.title,
-            performanceIndicator: acc.program.description || 'Target Program',
-            budget: Number(acc.program.budgetTarget),
-          }
-        : null,
-    }));
+      return accs.map((acc) => ({
+        ...acc,
+        actualBudgetUsed: Number(acc.actualBudgetUsed),
+        actualBeneficiaryMale: acc.actualMale,
+        actualBeneficiaryFemale: acc.actualFemale,
+        createdByName: acc.createdBy?.fullName || 'System',
+        gadPlan: acc.gadPlanItem
+          ? {
+              id: acc.gadPlanItem.id,
+              year: acc.gadPlanItem.gadPlan.fiscalYear,
+              office: acc.gadPlanItem.gadPlan.office.code || acc.gadPlanItem.gadPlan.office.name,
+              activity: acc.gadPlanItem.activity,
+              performanceIndicator: acc.gadPlanItem.performanceIndicator,
+              budget: Number(acc.gadPlanItem.budget),
+            }
+          : acc.program
+          ? {
+              id: acc.program.id,
+              year: acc.program.fiscalYear,
+              office: acc.program.office.code || acc.program.office.name,
+              activity: acc.program.title,
+              performanceIndicator: acc.program.description || 'Target Program',
+              budget: Number(acc.program.budgetTarget),
+            }
+          : null,
+      }));
+    } catch {
+      let filtered = [...MEMORY_ACCOMPLISHMENTS];
+      if (params.year) filtered = filtered.filter((a) => a.fiscalYear === Number(params.year));
+      if (params.quarter) filtered = filtered.filter((a) => a.quarter === Number(params.quarter));
+      return filtered;
+    }
   }
 
   public static async createAccomplishment(
@@ -83,6 +99,39 @@ export class AccomplishmentService {
     actorUser: { id: string; role: Role; officeId: string | null },
     req?: Request
   ) {
+    if (!isDatabaseConnected()) {
+      const created = {
+        id: `acc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        gadPlanItemId: data.gadPlanId || null,
+        programId: data.programId || null,
+        fiscalYear: parseInt(String(data.fiscalYear || data.year || new Date().getFullYear()), 10),
+        quarter: data.quarter ? parseInt(String(data.quarter), 10) : 1,
+        actualOutput: data.actualOutput.trim(),
+        actualMale: parseInt(String(data.actualMale || data.actualBeneficiaryMale || '0'), 10),
+        actualFemale: parseInt(String(data.actualFemale || data.actualBeneficiaryFemale || '0'), 10),
+        actualBeneficiaryMale: parseInt(String(data.actualMale || data.actualBeneficiaryMale || '0'), 10),
+        actualBeneficiaryFemale: parseInt(String(data.actualFemale || data.actualBeneficiaryFemale || '0'), 10),
+        actualBudgetUsed: parseFloat(String(data.actualBudgetUsed || '0')),
+        outputSummary: data.outputSummary || null,
+        remarks: data.remarks || null,
+        varianceExplanation: data.varianceExplanation || null,
+        createdById: actorUser.id,
+        createdByName: 'Current User',
+        attachments: [],
+        createdAt: new Date(),
+      };
+      MEMORY_ACCOMPLISHMENTS.unshift(created);
+      await AuditService.logActionTx(null, {
+        userId: actorUser.id,
+        action: 'ACCOMPLISHMENT_CREATED',
+        entityType: 'GADAccomplishment',
+        entityId: created.id,
+        afterState: created,
+        req,
+      });
+      return created;
+    }
+
     let targetPlanItemId: string | null = null;
     let targetProgramId: string | null = data.programId || null;
 
@@ -165,6 +214,20 @@ export class AccomplishmentService {
     actorUser: { id: string; role: Role; officeId: string | null },
     req?: Request
   ) {
+    if (!isDatabaseConnected()) {
+      const idx = MEMORY_ACCOMPLISHMENTS.findIndex((a) => a.id === id);
+      if (idx === -1) throw new NotFoundError('Accomplishment');
+      MEMORY_ACCOMPLISHMENTS[idx] = { ...MEMORY_ACCOMPLISHMENTS[idx], ...data };
+      await AuditService.logActionTx(null, {
+        userId: actorUser.id,
+        action: 'ACCOMPLISHMENT_UPDATED',
+        entityType: 'GADAccomplishment',
+        entityId: id,
+        req,
+      });
+      return MEMORY_ACCOMPLISHMENTS[idx];
+    }
+
     const existing = await prisma.gADAccomplishment.findUnique({
       where: { id },
       include: {
@@ -237,6 +300,20 @@ export class AccomplishmentService {
     actorUser: { id: string; role: Role; officeId: string | null },
     req?: Request
   ) {
+    if (!isDatabaseConnected()) {
+      const idx = MEMORY_ACCOMPLISHMENTS.findIndex((a) => a.id === id);
+      if (idx === -1) throw new NotFoundError('Accomplishment');
+      MEMORY_ACCOMPLISHMENTS.splice(idx, 1);
+      await AuditService.logActionTx(null, {
+        userId: actorUser.id,
+        action: 'ACCOMPLISHMENT_DELETED',
+        entityType: 'GADAccomplishment',
+        entityId: id,
+        req,
+      });
+      return { message: 'Accomplishment record deleted' };
+    }
+
     const existing = await prisma.gADAccomplishment.findUnique({
       where: { id },
       include: {
