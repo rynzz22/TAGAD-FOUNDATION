@@ -1,11 +1,6 @@
 import axios from 'axios';
 import { AppRole, UserProfile } from '../../types';
 
-/**
- * TAGAD Canonical Authentication Service
- * Authenticates against the TAGAD Backend API (/api/auth/login)
- * using canonical tagad_users, bcrypt hashing, and JWT tokens.
- */
 export const authService = {
   /**
    * Log in user via TAGAD canonical backend API
