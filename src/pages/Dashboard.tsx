@@ -64,16 +64,28 @@ const Dashboard: React.FC = () => {
     );
   }
 
+  const rawData = stats?.data || stats || {};
+  const summary = rawData?.summary || rawData;
+
+  const totalBeneficiaries = Number(summary?.totalBeneficiaries ?? rawData?.totalBeneficiaries ?? 0);
+  const totalMale = Number(summary?.totalMale ?? rawData?.totalMale ?? 0);
+  const totalFemale = Number(summary?.totalFemale ?? rawData?.totalFemale ?? 0);
+  const totalPrograms = Number(summary?.totalPrograms ?? rawData?.totalPrograms ?? 0);
+  const totalBudgetAllocated = Number(summary?.totalBudgetAllocated ?? rawData?.totalBudgetAllocated ?? 0);
+  const totalBudgetUsed = Number(summary?.totalBudgetUsed ?? rawData?.totalBudgetUsed ?? 0);
+  const byBarangay = Array.isArray(rawData?.byBarangay) ? rawData.byBarangay : [];
+  const recentBeneficiaries = Array.isArray(rawData?.recentBeneficiaries) ? rawData.recentBeneficiaries : [];
+
   const COLORS = ['#6366F1', '#F472B6', '#10B981', '#F59E0B', '#8B5CF6'];
   const GENDER_COLORS = ['#6366F1', '#F472B6'];
 
   const genderData = [
-    { name: 'Male', value: stats.totalMale },
-    { name: 'Female', value: stats.totalFemale },
+    { name: 'Male', value: totalMale },
+    { name: 'Female', value: totalFemale },
   ];
 
-  const budgetUsagePercent = stats.totalBudgetAllocated > 0 
-    ? (stats.totalBudgetUsed / stats.totalBudgetAllocated) * 100 
+  const budgetUsagePercent = totalBudgetAllocated > 0 
+    ? (totalBudgetUsed / totalBudgetAllocated) * 100 
     : 0;
 
   return (
@@ -101,15 +113,15 @@ const Dashboard: React.FC = () => {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#6B7280]">Total Beneficiaries</p>
-                <h3 className="text-4xl font-bold mt-2 text-[#111827]">{stats.totalBeneficiaries.toLocaleString()}</h3>
+                <h3 className="text-4xl font-bold mt-2 text-[#111827]">{totalBeneficiaries.toLocaleString()}</h3>
                 <div className="flex items-center gap-3 mt-3">
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-[#6366F1]" />
-                    <span className="text-xs font-semibold text-[#6B7280]">M: {stats.totalMale}</span>
+                    <span className="text-xs font-semibold text-[#6B7280]">M: {totalMale.toLocaleString()}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-[#F472B6]" />
-                    <span className="text-xs font-semibold text-[#6B7280]">F: {stats.totalFemale}</span>
+                    <span className="text-xs font-semibold text-[#6B7280]">F: {totalFemale.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -125,7 +137,7 @@ const Dashboard: React.FC = () => {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#6B7280]">Active Programs</p>
-                <h3 className="text-4xl font-bold mt-2 text-[#111827]">{stats.totalPrograms}</h3>
+                <h3 className="text-4xl font-bold mt-2 text-[#111827]">{totalPrograms}</h3>
                 <p className="text-[10px] text-emerald-600 flex items-center mt-3 font-bold uppercase tracking-wide">
                   <ArrowUpRight className="h-3 w-3 mr-1" /> Current Year
                 </p>
@@ -142,7 +154,7 @@ const Dashboard: React.FC = () => {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#6B7280]">GAD Budget Allocated</p>
-                <h3 className="text-3xl font-bold mt-2 text-[#111827]">₱{stats.totalBudgetAllocated.toLocaleString()}</h3>
+                <h3 className="text-3xl font-bold mt-2 text-[#111827]">₱{totalBudgetAllocated.toLocaleString()}</h3>
                 <p className="text-[10px] text-[#9CA3AF] mt-3 font-medium uppercase">Planned budget total</p>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
@@ -157,7 +169,7 @@ const Dashboard: React.FC = () => {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#6B7280]">Budget Utilized</p>
-                <h3 className="text-3xl font-bold mt-2 text-[#111827]">₱{stats.totalBudgetUsed.toLocaleString()}</h3>
+                <h3 className="text-3xl font-bold mt-2 text-[#111827]">₱{totalBudgetUsed.toLocaleString()}</h3>
                 <div className="flex items-center gap-3 mt-4">
                   <div className="flex-1 h-2 w-32 bg-gray-100 rounded-full overflow-hidden">
                     <div 
@@ -183,7 +195,7 @@ const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent className="h-[400px] pt-8">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.byBarangay} margin={{ top: 0, right: 30, left: 0, bottom: 20 }}>
+              <BarChart data={byBarangay} margin={{ top: 0, right: 30, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
                 <XAxis 
                   dataKey="barangay" 
@@ -255,7 +267,7 @@ const Dashboard: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {stats.recentBeneficiaries.map((b: any) => (
+              {recentBeneficiaries.map((b: any) => (
                 <TableRow key={b.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
                   <TableCell className="font-semibold text-slate-900 py-4 pl-6">{b.firstName} {b.lastName}</TableCell>
                   <TableCell className="py-4">
@@ -269,11 +281,11 @@ const Dashboard: React.FC = () => {
                   <TableCell className="text-slate-600 py-4">{b.barangay}</TableCell>
                   <TableCell className="text-slate-600 py-4">{b.sector}</TableCell>
                   <TableCell className="text-[#9CA3AF] text-xs font-medium py-4 pr-6">
-                    {new Date(b.dateEncoded).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {b.dateEncoded ? new Date(b.dateEncoded).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent'}
                   </TableCell>
                 </TableRow>
               ))}
-              {stats.recentBeneficiaries.length === 0 && (
+              {recentBeneficiaries.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-16 text-[#9CA3AF] italic text-sm">
                     No recent activities found for this period

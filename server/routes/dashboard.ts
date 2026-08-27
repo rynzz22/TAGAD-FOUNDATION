@@ -8,8 +8,12 @@ const router = Router();
 router.get('/stats', async (req: Request, res: Response) => {
   try {
     const year = req.query.year ? parseInt(req.query.year as string, 10) : undefined;
-    const stats = await DashboardService.getAdminDashboardStats(year);
-    return res.json(stats);
+    const stats: any = await DashboardService.getAdminDashboardStats(year);
+    const enriched = {
+      ...stats,
+      ...(stats?.summary || {}),
+    };
+    return res.json(enriched);
   } catch (error: any) {
     return sendError(res, error, error.statusCode || 500);
   }
@@ -18,8 +22,12 @@ router.get('/stats', async (req: Request, res: Response) => {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const year = req.query.year ? parseInt(req.query.year as string, 10) : undefined;
-    const stats = await DashboardService.getAdminDashboardStats(year);
-    return res.json(stats);
+    const stats: any = await DashboardService.getAdminDashboardStats(year);
+    const enriched = {
+      ...stats,
+      ...(stats?.summary || {}),
+    };
+    return res.json(enriched);
   } catch (error: any) {
     return sendError(res, error, error.statusCode || 500);
   }

@@ -11,15 +11,17 @@ import {
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Search, Plus, Edit, Archive, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Search, Plus, Edit, Archive, ChevronLeft, ChevronRight, Loader2, Upload } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
+import { CsvImportModal } from '../modules/ingestion';
 
-const BARANGAYS = [
-  "Bagong Silang", "Balintawak", "Burgos", "Calanggaman", "Calituban", "Comadog", "Cortez", 
-  "Dawis", "Fatima", "Gabas", "Gabi", "Hagbuñgan", "Hamorawon", "Katipunan", "Lapacan Norte", 
-  "Lapacan Sur", "Libjo", "Lobogon", "Mabini", "Mahangin", "Nueva Estrella", "Patao", 
-  "Poblacion (Talibon)", "Putik", "San Agustin", "San Carlos", "San Francisco", "San Isidro", 
-  "Santo Niño", "Suba", "Tangkigan", "Tugas", "Villa Teresita"
+// Statutory Reference: 25 Official Barangays of Talibon, Bohol
+const OFFICIAL_TALIBON_BARANGAYS = [
+  "Bagacay", "Balintawak", "Burgos", "Busalian", "Calituban", "Cataban", 
+  "Guindacpan", "Magsaysay", "Mahanay", "Nocnocan", "Poblacion", "Rizal", 
+  "San Agustin", "San Carlos", "San Francisco", "San Isidro", "San Jose", 
+  "San Pedro", "San Roque", "Santo Niño", "Sikatuna", "Suba", "Tanghaligi", 
+  "Tilmobo", "Zamora"
 ];
 
 const SECTORS = [
@@ -35,8 +37,10 @@ const DataEncoding: React.FC = () => {
   const [pagination, setPagination] = useState({ total: 0, page: 1, totalPages: 1 });
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({ sex: '', barangay: '', sector: '' });
+  const [barangayList, setBarangayList] = useState<string[]>(OFFICIAL_TALIBON_BARANGAYS);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -77,6 +81,18 @@ const DataEncoding: React.FC = () => {
 
   useEffect(() => {
     fetchData(1);
+    // Fetch canonical 25 Talibon barangays from API
+    api.get('/public/barangays')
+      .then((res) => {
+        if (Array.isArray(res.data?.data) && res.data.data.length > 0) {
+          const names = res.data.data.map((b: any) => b.name);
+          setBarangayList(names);
+        }
+      })
+      .catch(() => {
+        // Fallback to statutory 25 Talibon barangays
+        setBarangayList(OFFICIAL_TALIBON_BARANGAYS);
+      });
   }, [filters, search]);
 
   const handleOpenAdd = () => {
@@ -154,11 +170,23 @@ const DataEncoding: React.FC = () => {
           <h1 className="text-3xl font-bold tracking-tight text-[#111827]">Data Encoding</h1>
           <p className="text-sm font-medium text-[#6B7280]">Manage and track GAD beneficiaries</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           {!isViewer && (
-            <Button onClick={handleOpenAdd} className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg shadow-sm font-semibold">
-              <Plus className="h-4 w-4 mr-2" /> Add Beneficiary
-            </Button>
+            <>
+              <Button
+                onClick={() => setIsImportModalOpen(true)}
+                variant="outline"
+                className="border-[#6366F1] text-[#6366F1] hover:bg-indigo-50 rounded-lg shadow-xs font-semibold"
+              >
+                <Upload className="h-4 w-4 mr-2" /> Import CSV
+              </Button>
+              <Button
+                onClick={handleOpenAdd}
+                className="bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-lg shadow-xs font-semibold"
+              >
+                <Plus className="h-4 w-4 mr-2" /> Add Beneficiary
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -192,7 +220,7 @@ const DataEncoding: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent className="max-h-[300px] rounded-xl">
                   <SelectItem value="ALL">All Barangays</SelectItem>
-                  {BARANGAYS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                  {barangayList.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={filters.sector} onValueChange={(val) => setFilters({...filters, sector: val === 'ALL' ? '' : val})}>
@@ -352,7 +380,7 @@ const DataEncoding: React.FC = () => {
                 <Select value={formData.barangay} onValueChange={val => setFormData({...formData, barangay: val})}>
                   <SelectTrigger className="rounded-lg border-[#D1D5DB] py-6"><SelectValue placeholder="Select barangay" /></SelectTrigger>
                   <SelectContent className="max-h-[200px] rounded-xl">
-                    {BARANGAYS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                    {barangayList.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -383,6 +411,15 @@ const DataEncoding: React.FC = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* CSV Ingestion Wizard Modal */}
+      <CsvImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => fetchData(1)}
+        userRole={isAdmin ? 'ADMIN' : hasRole('ENCODER') ? 'ENCODER' : 'VIEWER'}
+        userOfficeName={defaultOfficeName}
+      />
     </div>
   );
 };

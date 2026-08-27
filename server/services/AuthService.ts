@@ -11,7 +11,7 @@ import { UnauthorizedError, NotFoundError } from '../lib/errors';
 import { AuditService } from './AuditService';
 import { Request } from 'express';
 
-const DEMO_USERS: any[] = [
+export const DEMO_USERS: any[] = [
   {
     id: 'usr-admin-01',
     email: 'admin@talibon.gov.ph',
@@ -75,6 +75,11 @@ const DEMO_USERS: any[] = [
 ];
 
 export class AuthService {
+  public static getDemoUser(idOrEmail: string) {
+    if (!idOrEmail) return null;
+    const clean = idOrEmail.toLowerCase().trim();
+    return DEMO_USERS.find((u) => u.id === idOrEmail || u.email?.toLowerCase().trim() === clean) || null;
+  }
   public static async login(email: string, passwordPlain: string, req?: Request) {
     const cleanEmail = email.toLowerCase().trim();
 

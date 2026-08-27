@@ -4,45 +4,9 @@ import { Role } from '@prisma/client';
 import { NotFoundError, ConflictError, AppError } from '../lib/errors';
 import { AuditService } from './AuditService';
 import { Request } from 'express';
+import { DEMO_USERS } from './AuthService';
 
-const DEMO_USERS_LIST = [
-  {
-    id: 'usr-admin-01',
-    email: 'admin@talibon.gov.ph',
-    fullName: 'System Administrator',
-    role: 'ADMIN',
-    officeId: 'off-mpdc',
-    barangayId: null,
-    isActive: true,
-    createdAt: new Date(),
-    office: { id: 'off-mpdc', code: 'MPDC', name: 'Municipal Planning and Development Coordinator' },
-    barangay: null,
-  },
-  {
-    id: 'usr-encoder-01',
-    email: 'encoder@talibon.gov.ph',
-    fullName: 'GAD Encoder (MSWDO)',
-    role: 'ENCODER',
-    officeId: 'off-mswdo',
-    barangayId: null,
-    isActive: true,
-    createdAt: new Date(),
-    office: { id: 'off-mswdo', code: 'MSWDO', name: 'Municipal Social Welfare and Development Office' },
-    barangay: null,
-  },
-  {
-    id: 'usr-viewer-01',
-    email: 'viewer@talibon.gov.ph',
-    fullName: 'Municipal Auditor / Viewer',
-    role: 'VIEWER',
-    officeId: null,
-    barangayId: null,
-    isActive: true,
-    createdAt: new Date(),
-    office: null,
-    barangay: null,
-  },
-];
+const DEMO_USERS_LIST = DEMO_USERS;
 
 export class UserService {
   public static async getUsers(params?: { search?: string; role?: string; officeId?: string }) {

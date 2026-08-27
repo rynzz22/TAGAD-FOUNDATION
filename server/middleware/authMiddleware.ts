@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import prisma from '../lib/prisma';
+import prisma, { isDatabaseConnected } from '../lib/prisma';
 import { verifyAccessToken, TokenPayload } from '../lib/jwt';
 import { UnauthorizedError, ForbiddenError, OfficeScopeError } from '../lib/errors';
 import { sendError } from '../lib/response';
 import { Role } from '@prisma/client';
+import { AuthService } from '../services/AuthService';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -35,13 +36,24 @@ export const requireAuth = async (
   try {
     const payload = verifyAccessToken(token);
     
-    const user = await prisma.user.findUnique({
-      where: { id: payload.id },
-      include: {
-        office: { select: { id: true, code: true, name: true, isActive: true } },
-        barangay: { select: { id: true, code: true, name: true } },
-      },
-    });
+    let user: any = null;
+    if (isDatabaseConnected()) {
+      try {
+        user = await prisma.user.findUnique({
+          where: { id: payload.id },
+          include: {
+            office: { select: { id: true, code: true, name: true, isActive: true } },
+            barangay: { select: { id: true, code: true, name: true } },
+          },
+        });
+      } catch {
+        // Fall back to demo user store
+      }
+    }
+
+    if (!user) {
+      user = AuthService.getDemoUser(payload.id);
+    }
 
     if (!user) {
       return sendError(res, new UnauthorizedError('User account not found', 'USER_NOT_FOUND'));
@@ -54,8 +66,8 @@ export const requireAuth = async (
     req.user = {
       id: user.id,
       email: user.email,
-      fullName: user.fullName,
-      role: user.role,
+      fullName: user.fullName || user.name || 'System Official',
+      role: user.role as Role,
       officeId: user.officeId,
       office: user.office,
       barangayId: user.barangayId,
