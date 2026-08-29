@@ -1,17 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  FileText,
-  Building,
-  Coins,
-  ShieldCheck,
-  ShieldAlert,
-  Filter,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  RefreshCw,
-  Search,
-} from 'lucide-react';
+import { ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { publicApi } from '../../api/publicApi';
 import { PublicGADPlan, PublicOffice } from '../../types/public.types';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -49,7 +37,6 @@ export const PublicGADPlans: React.FC = () => {
         officeId: selectedOfficeId || undefined,
       });
       setPlans(res);
-      // Auto-expand all plans by default
       const initialExpanded: Record<string, boolean> = {};
       res.forEach((p) => {
         initialExpanded[p.id] = true;
@@ -98,34 +85,34 @@ export const PublicGADPlans: React.FC = () => {
   const totalItemsCount = filteredPlans.reduce((acc, curr) => acc + (curr.items?.length || 0), 0);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-8">
-      {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm space-y-3">
-        <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-          <ShieldCheck className="w-4 h-4" />
-          <span>Statutory GPB Transparency Archive</span>
+    <div className="max-w-6xl mx-auto px-4 sm:px-8 py-12 space-y-12">
+      {/* Header Section */}
+      <section className="space-y-4">
+        <div className="text-xs font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400">
+          Annual GAD Plan & Budget (GPB) • Municipality of Talibon
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-          Approved Annual GAD Plans & Budgets (GPB)
+        <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
+          Approved GAD Plans & Budgets
         </h1>
-        <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-3xl leading-relaxed">
-          Official statutory Gender and Development Plan and Budget matrices reviewed and approved by the Talibon GFPS and Municipal Council in accordance with PCW guidelines.
+        <p className="text-sm text-slate-600 dark:text-slate-400 max-w-3xl leading-relaxed">
+          Official Gender and Development Plan and Budget matrices reviewed and approved by the Talibon GFPS and Municipal Council in accordance with national guidelines.
         </p>
-      </div>
+      </section>
+
+      <hr className="border-slate-200 dark:border-slate-800" />
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
+      <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4 text-xs">
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <label htmlFor="plans-year" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-              Fiscal Year:
+            <label htmlFor="plans-year" className="font-medium text-slate-600 dark:text-slate-400">
+              Year:
             </label>
             <select
               id="plans-year"
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
-              className="text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-100"
+              className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2.5 py-1 text-slate-900 dark:text-slate-100"
             >
               <option value={2026}>2026</option>
               <option value={2025}>2025</option>
@@ -134,15 +121,14 @@ export const PublicGADPlans: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <Building className="w-4 h-4 text-slate-400" />
-            <label htmlFor="plans-office" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-              Office / Department:
+            <label htmlFor="plans-office" className="font-medium text-slate-600 dark:text-slate-400">
+              Office:
             </label>
             <select
               id="plans-office"
               value={selectedOfficeId}
               onChange={(e) => setSelectedOfficeId(e.target.value)}
-              className="text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-100"
+              className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2.5 py-1 text-slate-900 dark:text-slate-100"
             >
               <option value="">All Municipal Offices</option>
               {offices.map((off) => (
@@ -154,50 +140,39 @@ export const PublicGADPlans: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search activities, issues..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={loadPlans}
-            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors shrink-0"
-            title="Refresh list"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
+        <div className="relative w-full md:w-64">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search activities, issues..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-8 pr-3 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-slate-500"
+          />
         </div>
-      </div>
+      </section>
 
       {/* Aggregate Metric Banner */}
       {!loading && !error && filteredPlans.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-            <span className="text-[11px] font-medium text-slate-500">Approved Department Plans</span>
-            <div className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
-              {filteredPlans.length} GPB Submissions
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 pt-2">
+          <div className="space-y-1 border-l-2 border-slate-900 dark:border-white pl-4">
+            <div className="text-xs text-slate-500 font-medium">Department Plans</div>
+            <div className="text-2xl font-semibold text-slate-900 dark:text-white tabular-nums">
+              {filteredPlans.length} GPB Plans
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-            <span className="text-[11px] font-medium text-slate-500">Total Statutory GAD Budget</span>
-            <div className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
+          <div className="space-y-1 border-l-2 border-slate-300 dark:border-slate-700 pl-4">
+            <div className="text-xs text-slate-500 font-medium">Total GAD Budget</div>
+            <div className="text-2xl font-semibold text-slate-900 dark:text-white tabular-nums">
               {formatCurrency(totalGADBudget)}
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-            <span className="text-[11px] font-medium text-slate-500">Scheduled Line Activities</span>
-            <div className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
-              {totalItemsCount} GAD Line Items
+          <div className="space-y-1 border-l-2 border-slate-300 dark:border-slate-700 pl-4">
+            <div className="text-xs text-slate-500 font-medium">Line Activities</div>
+            <div className="text-2xl font-semibold text-slate-900 dark:text-white tabular-nums">
+              {totalItemsCount} Actions
             </div>
           </div>
         </div>
@@ -206,21 +181,20 @@ export const PublicGADPlans: React.FC = () => {
       {/* Loading & Error State */}
       {loading && (
         <div className="py-16">
-          <LoadingSpinner size="lg" text="Retrieving approved statutory GAD plans..." />
+          <LoadingSpinner size="lg" text="Loading approved GAD plans..." />
         </div>
       )}
 
       {error && !loading && (
-        <div className="p-6 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 space-y-3">
-          <div className="flex items-center gap-2 font-bold text-sm">
-            <ShieldAlert className="w-5 h-5" />
-            <span>Connection Error</span>
-          </div>
-          <p className="text-xs">{error}</p>
+        <div className="py-8 space-y-3">
+          <h3 className="text-sm font-semibold text-rose-700 dark:text-rose-400">
+            Connection Error
+          </h3>
+          <p className="text-xs text-slate-600 dark:text-slate-400">{error}</p>
           <button
             type="button"
             onClick={loadPlans}
-            className="py-1.5 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-colors"
+            className="text-xs font-medium text-slate-900 dark:text-white underline"
           >
             Retry
           </button>
@@ -229,106 +203,89 @@ export const PublicGADPlans: React.FC = () => {
 
       {/* Plans List */}
       {!loading && !error && (
-        <div className="space-y-6">
+        <div className="space-y-10">
           {filteredPlans.map((plan) => {
             const isExpanded = expandedPlans[plan.id] !== false;
             return (
               <div
                 key={plan.id}
-                className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
+                className="border-t border-slate-200 dark:border-slate-800 pt-6 space-y-4"
               >
-                {/* Plan Header Bar */}
-                <div
-                  onClick={() => toggleExpand(plan.id)}
-                  className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>APPROVED GPB</span>
-                      </span>
-                      <span className="text-xs text-slate-500 font-semibold">
-                        FY {plan.fiscalYear}
-                      </span>
+                {/* Plan Header */}
+                <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+                  <div>
+                    <div className="text-xs text-slate-500">
+                      FY {plan.fiscalYear} • Approved Plan
                     </div>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                       {plan.officeName} ({plan.office})
-                    </h3>
+                    </h2>
                   </div>
 
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <div className="text-[10px] uppercase font-semibold text-slate-500">
-                        GAD Budget Allocated
-                      </div>
-                      <div className="text-base font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
+                  <div className="flex items-center gap-4 text-xs">
+                    <div>
+                      <span className="text-slate-500 mr-1.5">Budget:</span>
+                      <span className="font-semibold text-slate-900 dark:text-white tabular-nums">
                         {formatCurrency(plan.gadBudget)}
-                      </div>
+                      </span>
                     </div>
 
                     <button
                       type="button"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                      aria-label="Toggle plan items"
+                      onClick={() => toggleExpand(plan.id)}
+                      className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-900 dark:hover:text-white"
                     >
-                      {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                      <span>{isExpanded ? 'Hide' : 'Show'} ({plan.items.length})</span>
+                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
                   </div>
                 </div>
 
-                {/* Plan Items Matrix */}
+                {/* Plan Items Table/List */}
                 {isExpanded && (
-                  <div className="p-5 space-y-4">
-                    <div className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                      Approved GAD Plan Line Activities ({plan.items.length})
-                    </div>
-
-                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {plan.items.map((item, idx) => (
-                        <div key={item.id || idx} className="py-4 first:pt-0 last:pb-0 space-y-3">
-                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                                {idx + 1}. {item.activity}
-                              </h4>
-                              <p className="text-xs text-slate-600 dark:text-slate-400">
-                                <strong>Gender Issue / Mandate:</strong> {item.genderIssue}
-                              </p>
-                            </div>
-
-                            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0 text-right space-y-0.5">
-                              <div className="text-[10px] text-slate-500 font-medium">Allocated Budget</div>
-                              <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                                {formatCurrency(item.budget)}
-                              </div>
-                              <div className="text-[9px] text-slate-400">{item.fundSource}</div>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1">
-                            <div>
-                              <span className="font-semibold text-slate-700 dark:text-slate-300">Target Group:</span>{' '}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
+                          <th className="py-2.5 px-3 font-semibold">Activity</th>
+                          <th className="py-2.5 px-3 font-semibold">Gender Issue / Mandate</th>
+                          <th className="py-2.5 px-3 font-semibold">Target Group</th>
+                          <th className="py-2.5 px-3 font-semibold">Performance Indicator</th>
+                          <th className="py-2.5 px-3 font-semibold text-right">Budget</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {plan.items.map((item, idx) => (
+                          <tr key={item.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="py-2 px-3 font-medium text-slate-900 dark:text-white align-top">
+                              {item.activity}
+                            </td>
+                            <td className="py-2 px-3 text-slate-600 dark:text-slate-400 align-top max-w-xs">
+                              {item.genderIssue}
+                            </td>
+                            <td className="py-2 px-3 text-slate-600 dark:text-slate-400 align-top">
                               {item.targetGroup}
-                            </div>
-                            <div>
-                              <span className="font-semibold text-slate-700 dark:text-slate-300">Indicator:</span>{' '}
+                            </td>
+                            <td className="py-2 px-3 text-slate-600 dark:text-slate-400 align-top max-w-xs">
                               {item.performanceIndicator}
-                            </div>
-                            <div>
-                              <span className="font-semibold text-slate-700 dark:text-slate-300">Responsible Unit:</span>{' '}
-                              {item.responsibleOffice}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-
-                      {plan.items.length === 0 && (
-                        <div className="py-6 text-center text-xs text-slate-400">
-                          No line items registered for this plan.
-                        </div>
-                      )}
-                    </div>
+                            </td>
+                            <td className="py-2 px-3 text-right font-medium text-slate-900 dark:text-white tabular-nums align-top whitespace-nowrap">
+                              {formatCurrency(item.budget)}
+                              <span className="block text-[10px] text-slate-400 font-normal">
+                                {item.fundSource}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        {plan.items.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="py-4 text-center text-slate-400">
+                              No line items registered for this plan.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
@@ -336,14 +293,8 @@ export const PublicGADPlans: React.FC = () => {
           })}
 
           {filteredPlans.length === 0 && (
-            <div className="py-16 text-center space-y-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-8">
-              <FileText className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                No approved GAD plans found
-              </h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                No approved annual GAD plans match your selected fiscal year and office filters.
-              </p>
+            <div className="py-12 text-center text-xs text-slate-400">
+              No approved GAD plans found for the selected filters.
             </div>
           )}
         </div>
@@ -351,3 +302,4 @@ export const PublicGADPlans: React.FC = () => {
     </div>
   );
 };
+

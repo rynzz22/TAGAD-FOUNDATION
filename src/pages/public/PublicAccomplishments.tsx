@@ -1,17 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Award,
-  Calendar,
-  Building,
-  Coins,
-  Users,
-  ShieldCheck,
-  ShieldAlert,
-  Filter,
-  CheckCircle2,
-  RefreshCw,
-  Search,
-} from 'lucide-react';
+import { Search } from 'lucide-react';
 import { publicApi } from '../../api/publicApi';
 import { PublicAccomplishment } from '../../types/public.types';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -70,34 +58,34 @@ export const PublicAccomplishments: React.FC = () => {
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-8">
-      {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm space-y-3">
-        <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-          <ShieldCheck className="w-4 h-4" />
-          <span>Auditable GAD Compliance</span>
+    <div className="max-w-6xl mx-auto px-4 sm:px-8 py-12 space-y-12">
+      {/* Header Section */}
+      <section className="space-y-4">
+        <div className="text-xs font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400">
+          Accomplishment Feed • Municipality of Talibon
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-          GAD Accomplishments & Transparency Feed
+        <h1 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
+          GAD Accomplishments & Verification
         </h1>
-        <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-3xl leading-relaxed">
-          Physical and financial accomplishments verified by the Talibon Gender and Development Focal Point System (GFPS). Transparent evidence of public fund utilization and citizen impact.
+        <p className="text-sm text-slate-600 dark:text-slate-400 max-w-3xl leading-relaxed">
+          Physical and financial accomplishments verified by the Talibon Gender and Development Focal Point System (GFPS). Records of public fund utilization and citizen reach.
         </p>
-      </div>
+      </section>
+
+      <hr className="border-slate-200 dark:border-slate-800" />
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
+      <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4 text-xs">
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <label htmlFor="accomp-year" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-              Fiscal Year:
+            <label htmlFor="accomp-year" className="font-medium text-slate-600 dark:text-slate-400">
+              Year:
             </label>
             <select
               id="accomp-year"
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
-              className="text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-100"
+              className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2.5 py-1 text-slate-900 dark:text-slate-100"
             >
               <option value={2026}>2026</option>
               <option value={2025}>2025</option>
@@ -106,15 +94,14 @@ export const PublicAccomplishments: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <label htmlFor="accomp-quarter" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+            <label htmlFor="accomp-quarter" className="font-medium text-slate-600 dark:text-slate-400">
               Quarter:
             </label>
             <select
               id="accomp-quarter"
               value={selectedQuarter}
               onChange={(e) => setSelectedQuarter(e.target.value)}
-              className="text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-100"
+              className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2.5 py-1 text-slate-900 dark:text-slate-100"
             >
               <option value="">All Quarters</option>
               <option value="1">Q1 (Jan - Mar)</option>
@@ -125,49 +112,38 @@ export const PublicAccomplishments: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search output or office..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={loadAccomplishments}
-            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors shrink-0"
-            title="Refresh list"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
+        <div className="relative w-full md:w-64">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search output or office..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-8 pr-3 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-slate-500"
+          />
         </div>
-      </div>
+      </section>
 
       {/* Aggregate Metric Banner */}
       {!loading && !error && filteredAccomplishments.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-            <span className="text-[11px] font-medium text-slate-500">Accomplishment Reports</span>
-            <div className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
-              {filteredAccomplishments.length} Recorded Entries
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 pt-2">
+          <div className="space-y-1 border-l-2 border-slate-900 dark:border-white pl-4">
+            <div className="text-xs text-slate-500 font-medium">Recorded Entries</div>
+            <div className="text-2xl font-semibold text-slate-900 dark:text-white tabular-nums">
+              {filteredAccomplishments.length} Reports
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-            <span className="text-[11px] font-medium text-slate-500">Verified Budget Expended</span>
-            <div className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
+          <div className="space-y-1 border-l-2 border-slate-300 dark:border-slate-700 pl-4">
+            <div className="text-xs text-slate-500 font-medium">Verified Budget Expended</div>
+            <div className="text-2xl font-semibold text-slate-900 dark:text-white tabular-nums">
               {formatCurrency(totalUtilized)}
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-            <span className="text-[11px] font-medium text-slate-500">Total Citizens Directly Served</span>
-            <div className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
+          <div className="space-y-1 border-l-2 border-slate-300 dark:border-slate-700 pl-4">
+            <div className="text-xs text-slate-500 font-medium">Direct Citizen Reach</div>
+            <div className="text-2xl font-semibold text-slate-900 dark:text-white tabular-nums">
               {totalBeneficiariesServed.toLocaleString()}
             </div>
           </div>
@@ -177,21 +153,20 @@ export const PublicAccomplishments: React.FC = () => {
       {/* Loading & Error State */}
       {loading && (
         <div className="py-16">
-          <LoadingSpinner size="lg" text="Retrieving accomplishment reports..." />
+          <LoadingSpinner size="lg" text="Loading accomplishment reports..." />
         </div>
       )}
 
       {error && !loading && (
-        <div className="p-6 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 space-y-3">
-          <div className="flex items-center gap-2 font-bold text-sm">
-            <ShieldAlert className="w-5 h-5" />
-            <span>Connection Error</span>
-          </div>
-          <p className="text-xs">{error}</p>
+        <div className="py-8 space-y-3">
+          <h3 className="text-sm font-semibold text-rose-700 dark:text-rose-400">
+            Connection Error
+          </h3>
+          <p className="text-xs text-slate-600 dark:text-slate-400">{error}</p>
           <button
             type="button"
             onClick={loadAccomplishments}
-            className="py-1.5 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-colors"
+            className="text-xs font-medium text-slate-900 dark:text-white underline"
           >
             Retry
           </button>
@@ -200,85 +175,66 @@ export const PublicAccomplishments: React.FC = () => {
 
       {/* Accomplishments Feed List */}
       {!loading && !error && (
-        <div className="space-y-4">
+        <div className="divide-y divide-slate-200 dark:divide-slate-800">
           {filteredAccomplishments.map((item) => (
             <div
               key={item.id}
-              className="p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4"
+              className="py-8 first:pt-0 space-y-4"
             >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                    Q{item.quarter} • FY {item.fiscalYear}
-                  </span>
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+              <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+                <div className="space-y-1">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Q{item.quarter} FY {item.fiscalYear} • {item.office}
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
                     {item.activityTitle}
                   </h3>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-xs text-slate-500 shrink-0">
-                  <Building className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">{item.office}</span>
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 shrink-0">
+                  Expended: <span className="text-slate-900 dark:text-white font-semibold tabular-nums">{formatCurrency(item.actualBudgetUsed)}</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Physical Output (2 Cols) */}
-                <div className="md:col-span-2 space-y-2">
-                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    Actual Physical Output:
-                  </div>
-                  <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed font-medium bg-slate-50 dark:bg-slate-800/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-                    {item.actualOutput}
+              <div className="space-y-2 max-w-4xl">
+                <div className="text-xs font-medium text-slate-500">Actual Physical Output</div>
+                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                  {item.actualOutput}
+                </p>
+                {item.outputSummary && (
+                  <p className="text-xs text-slate-500 italic">
+                    Note: {item.outputSummary}
                   </p>
-                  {item.outputSummary && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 italic">
-                      Note: {item.outputSummary}
-                    </p>
-                  )}
+                )}
+              </div>
+
+              {/* Reach Stats */}
+              <div className="flex flex-wrap items-center gap-6 text-xs text-slate-600 dark:text-slate-400 pt-1">
+                <div>
+                  <span className="text-slate-400 mr-1.5">Total Served:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                    {item.totalBeneficiaries.toLocaleString()}
+                  </span>
                 </div>
-
-                {/* Financial & Reach Summary (1 Col) */}
-                <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                      <Coins className="w-3 h-3 text-emerald-500" />
-                      <span>Actual Budget Expended</span>
-                    </div>
-                    <div className="text-base font-bold text-slate-900 dark:text-white tabular-nums">
-                      {formatCurrency(item.actualBudgetUsed)}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-1">
-                    <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                      <Users className="w-3 h-3 text-indigo-500" />
-                      <span>Citizens Reached</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-900 dark:text-white">
-                        {item.totalBeneficiaries.toLocaleString()} Total
-                      </span>
-                      <span className="text-[11px] text-slate-500">
-                        <strong className="text-pink-600 dark:text-pink-400">{item.actualFemale} F</strong> /{' '}
-                        <strong className="text-indigo-600 dark:text-indigo-400">{item.actualMale} M</strong>
-                      </span>
-                    </div>
-                  </div>
+                <div>
+                  <span className="text-slate-400 mr-1.5">Female:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                    {item.actualFemale.toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 mr-1.5">Male:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                    {item.actualMale.toLocaleString()}
+                  </span>
                 </div>
               </div>
             </div>
           ))}
 
           {filteredAccomplishments.length === 0 && (
-            <div className="py-16 text-center space-y-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-8">
-              <Award className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                No accomplishment records found
-              </h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                No GAD accomplishments have been logged or verified for the selected year and quarter.
-              </p>
+            <div className="py-12 text-center text-xs text-slate-400">
+              No accomplishment records found for the selected filters.
             </div>
           )}
         </div>
@@ -286,3 +242,4 @@ export const PublicAccomplishments: React.FC = () => {
     </div>
   );
 };
+
