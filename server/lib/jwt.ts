@@ -2,8 +2,81 @@ import 'dotenv/config';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'tagad_talibon_jwt_secret_key_2026';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'tagad_talibon_refresh_secret_key_2026';
+const INSECURE_DEFAULT_SECRETS = new Set([
+  'tagad_talibon_jwt_secret_key_2026',
+  'tagad_talibon_refresh_secret_key_2026',
+  'tagad_talibon_secret_2025',
+  'secret',
+  'jwt-secret',
+  'development-secret',
+  'change-me',
+  'test',
+]);
+
+const DEV_FALLBACK_SECRET = 'dev_only_tagad_local_signing_secret_do_not_use_in_prod_2026';
+const DEV_FALLBACK_REFRESH_SECRET = 'dev_only_tagad_local_refresh_secret_do_not_use_in_prod_2026';
+
+export class JwtConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'JwtConfigurationError';
+  }
+}
+
+/**
+ * Validates and retrieves JWT secrets according to environment mode.
+ * In production (NODE_ENV=production):
+ *   - JWT_SECRET and JWT_REFRESH_SECRET must be explicitly provided in the environment.
+ *   - Insecure default/placeholder secrets and short keys (<16 chars) are strictly rejected.
+ *   - Fails fast by throwing JwtConfigurationError.
+ * In development/test mode:
+ *   - Controlled development secrets are permitted if environment variables are not set.
+ */
+export function validateJwtConfig(): { jwtSecret: string; jwtRefreshSecret: string } {
+  const isProd = process.env.NODE_ENV === 'production';
+  const rawSecret = process.env.JWT_SECRET;
+  const rawRefreshSecret = process.env.JWT_REFRESH_SECRET;
+
+  if (isProd) {
+    if (!rawSecret || rawSecret.trim().length === 0) {
+      throw new JwtConfigurationError(
+        'CRITICAL CONFIGURATION ERROR: JWT_SECRET environment variable is required in production mode. Refusing to start with insecure configuration.'
+      );
+    }
+    if (INSECURE_DEFAULT_SECRETS.has(rawSecret.trim()) || rawSecret.length < 16) {
+      throw new JwtConfigurationError(
+        'CRITICAL SECURITY ERROR: Insecure, default, or short JWT_SECRET provided in production mode. A strong secret (min 16 chars) is required.'
+      );
+    }
+
+    if (!rawRefreshSecret || rawRefreshSecret.trim().length === 0) {
+      throw new JwtConfigurationError(
+        'CRITICAL CONFIGURATION ERROR: JWT_REFRESH_SECRET environment variable is required in production mode. Refusing to start with insecure configuration.'
+      );
+    }
+    if (INSECURE_DEFAULT_SECRETS.has(rawRefreshSecret.trim()) || rawRefreshSecret.length < 16) {
+      throw new JwtConfigurationError(
+        'CRITICAL SECURITY ERROR: Insecure, default, or short JWT_REFRESH_SECRET provided in production mode. A strong secret (min 16 chars) is required.'
+      );
+    }
+
+    return { jwtSecret: rawSecret, jwtRefreshSecret: rawRefreshSecret };
+  }
+
+  // Non-production (development / testing)
+  const jwtSecret = rawSecret && rawSecret.trim().length > 0 ? rawSecret : DEV_FALLBACK_SECRET;
+  const jwtRefreshSecret = rawRefreshSecret && rawRefreshSecret.trim().length > 0 ? rawRefreshSecret : DEV_FALLBACK_REFRESH_SECRET;
+
+  return { jwtSecret, jwtRefreshSecret };
+}
+
+export function getJwtSecret(): string {
+  return validateJwtConfig().jwtSecret;
+}
+
+export function getJwtRefreshSecret(): string {
+  return validateJwtConfig().jwtRefreshSecret;
+}
 
 export interface TokenPayload {
   id: string;
@@ -81,14 +154,14 @@ export const revokeAllUserSessions = (userId: string): void => {
 export const signAccessToken = (payload: TokenPayload): string => {
   const jti = payload.jti || randomUUID();
   const sessionId = payload.sessionId || randomUUID();
-  return jwt.sign({ ...payload, jti, sessionId }, JWT_SECRET, { expiresIn: '8h' });
+  return jwt.sign({ ...payload, jti, sessionId }, getJwtSecret(), { expiresIn: '8h' });
 };
 
 export const signRefreshToken = (payload: TokenPayload): string => {
   const jti = payload.jti || randomUUID();
   const sessionId = payload.sessionId || randomUUID();
   registerRefreshSession(sessionId, payload.id, jti);
-  return jwt.sign({ ...payload, jti, sessionId }, JWT_REFRESH_SECRET, { expiresIn: '30d' });
+  return jwt.sign({ ...payload, jti, sessionId }, getJwtRefreshSecret(), { expiresIn: '30d' });
 };
 
 export const verifyAccessToken = (token: string): TokenPayload => {
@@ -98,7 +171,7 @@ export const verifyAccessToken = (token: string): TokenPayload => {
     throw err;
   }
 
-  const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
+  const decoded = jwt.verify(token, getJwtSecret()) as TokenPayload;
   if (decoded.jti && isTokenRevoked(decoded.jti)) {
     const err: any = new Error('Token has been revoked');
     err.name = 'TokenRevokedError';
@@ -125,7 +198,7 @@ export const verifyRefreshToken = (token: string): TokenPayload => {
     throw err;
   }
 
-  const decoded = jwt.verify(token, JWT_REFRESH_SECRET) as TokenPayload;
+  const decoded = jwt.verify(token, getJwtRefreshSecret()) as TokenPayload;
   if (decoded.jti && isTokenRevoked(decoded.jti)) {
     const err: any = new Error('Refresh token has been revoked or already rotated');
     err.name = 'TokenRevokedError';

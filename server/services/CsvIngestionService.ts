@@ -6,6 +6,8 @@ import { AuditService } from './AuditService';
 import { ValidationError, ForbiddenError, OfficeScopeError } from '../lib/errors';
 import { Request } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { MEMORY_BENEFICIARIES } from './BeneficiaryService';
+import { MEMORY_PROGRAMS } from './ProgramService';
 
 export type IngestionDatasetType =
   | 'BENEFICIARY_REGISTRY'
@@ -676,6 +678,10 @@ export class CsvIngestionService {
       actorUser,
     } = params;
 
+    if (actorUser.role === Role.VIEWER) {
+      throw new ForbiddenError('Viewers have read-only access and cannot perform batch ingestion');
+    }
+
     // 1. Run complete dry-run validation first
     const preview = await this.generatePreview(params);
 
@@ -924,7 +930,7 @@ export class CsvIngestionService {
               errorCount++;
               continue;
             }
-            const existingIdx = MEMORY_INGESTED_BENEFICIARIES.findIndex(
+            const existingIdx = MEMORY_BENEFICIARIES.findIndex(
               (b) =>
                 b.firstName?.toLowerCase() === res.data.firstName.toLowerCase() &&
                 b.lastName?.toLowerCase() === res.data.lastName.toLowerCase() &&
@@ -935,30 +941,40 @@ export class CsvIngestionService {
               if (duplicateStrategy === 'SKIP') {
                 skippedCount++;
               } else if (duplicateStrategy === 'UPDATE') {
-                MEMORY_INGESTED_BENEFICIARIES[existingIdx] = {
-                  ...MEMORY_INGESTED_BENEFICIARIES[existingIdx],
+                MEMORY_BENEFICIARIES[existingIdx] = {
+                  ...MEMORY_BENEFICIARIES[existingIdx],
                   ...res.data,
                   updatedAt: new Date(),
                 };
                 updatedCount++;
               } else if (duplicateStrategy === 'APPEND') {
-                MEMORY_INGESTED_BENEFICIARIES.push({
+                const newRecord = {
                   id: `ben-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
                   ...res.data,
+                  barangay: ref.barangays.byId.get(res.data.barangayId)?.name || 'Poblacion',
+                  office: ref.offices.byId.get(res.data.officeId)?.code || 'MSWDO',
                   encodedById: actorUser.id,
+                  isArchived: false,
                   createdAt: new Date(),
                   updatedAt: new Date(),
-                });
+                };
+                MEMORY_BENEFICIARIES.unshift(newRecord);
+                MEMORY_INGESTED_BENEFICIARIES.push(newRecord);
                 insertedCount++;
               }
             } else {
-              MEMORY_INGESTED_BENEFICIARIES.push({
+              const newRecord = {
                 id: `ben-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
                 ...res.data,
+                barangay: ref.barangays.byId.get(res.data.barangayId)?.name || 'Poblacion',
+                office: ref.offices.byId.get(res.data.officeId)?.code || 'MSWDO',
                 encodedById: actorUser.id,
+                isArchived: false,
                 createdAt: new Date(),
                 updatedAt: new Date(),
-              });
+              };
+              MEMORY_BENEFICIARIES.unshift(newRecord);
+              MEMORY_INGESTED_BENEFICIARIES.push(newRecord);
               insertedCount++;
             }
           } else if (preview.datasetType === 'PROGRAM_CATALOG') {
@@ -968,12 +984,16 @@ export class CsvIngestionService {
               errorCount++;
               continue;
             }
-            MEMORY_INGESTED_PROGRAMS.push({
+            const newProg = {
               id: `prog-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
               ...res.data,
+              office: ref.offices.byId.get(res.data.officeId)?.code || 'MSWDO',
+              status: res.data.status || 'ACTIVE',
               createdById: actorUser.id,
               createdAt: new Date(),
-            });
+            };
+            MEMORY_PROGRAMS.unshift(newProg);
+            MEMORY_INGESTED_PROGRAMS.push(newProg);
             insertedCount++;
           } else if (preview.datasetType === 'HOUSEHOLD_SURVEY') {
             const res = this.processHouseholdRow(canonicalData, rowNumber, ref);
@@ -981,6 +1001,12 @@ export class CsvIngestionService {
               errors.push(...res.issues.filter((iss) => iss.severity === 'ERROR'));
               errorCount++;
               continue;
+            }
+            const existingHhIdx = MEMORY_HOUSEHOLDS.findIndex((h) => h.householdNo === res.data.householdNo);
+            if (existingHhIdx >= 0) {
+              MEMORY_HOUSEHOLDS[existingHhIdx] = { ...MEMORY_HOUSEHOLDS[existingHhIdx], ...res.data };
+            } else {
+              MEMORY_HOUSEHOLDS.push({ id: `hh-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`, ...res.data });
             }
             insertedCount++;
           } else if (preview.datasetType === 'GAD_ACCOMPLISHMENT') {
@@ -1195,7 +1221,7 @@ export class CsvIngestionService {
   ): { data: Record<string, any>; issues: RowValidationIssue[] } {
     const issues: RowValidationIssue[] = [];
 
-    const householdNo = this.normalizeString(raw.householdNo || raw.household_no || raw.hh_no || raw.id);
+    const householdNo = this.normalizeString(raw.householdNo || raw.household_no || raw.household_number || raw.householdnumber || raw.household_id || raw.hh_no || raw.hh_id || raw.id);
     if (!householdNo) {
       issues.push({ rowNumber, field: 'householdNo', value: householdNo, severity: 'ERROR', message: 'Household Number is required' });
     }
@@ -1208,7 +1234,10 @@ export class CsvIngestionService {
     const purok = this.normalizeString(raw.purok || raw.sitio) || null;
     const is4Ps = this.normalizeBoolean(raw.is4Ps ?? raw.is_4ps ?? raw['4ps']);
     const isIndigent = this.normalizeBoolean(raw.isIndigent ?? raw.is_indigent ?? raw.indigent);
-    const headName = this.normalizeString(raw.headName || raw.head_name || raw.household_head) || null;
+    let headName = this.normalizeString(raw.headName || raw.head_name || raw.household_head) || null;
+    if (!headName && (raw.head_first_name || raw.head_last_name)) {
+      headName = `${this.normalizeString(raw.head_first_name)} ${this.normalizeString(raw.head_last_name)}`.trim() || null;
+    }
 
     return {
       data: {
@@ -1325,7 +1354,7 @@ export class CsvIngestionService {
       }
 
       // Memory beneficiaries check
-      for (const b of MEMORY_INGESTED_BENEFICIARIES) {
+      for (const b of [...MEMORY_BENEFICIARIES, ...MEMORY_INGESTED_BENEFICIARIES]) {
         if (b.firstName && b.lastName && b.barangayId) {
           const fn = b.firstName.toLowerCase().trim();
           const ln = b.lastName.toLowerCase().trim();

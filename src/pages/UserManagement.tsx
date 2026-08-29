@@ -217,6 +217,7 @@ const UserManagement: React.FC = () => {
                 <Select value={formData.role} onValueChange={val => setFormData({...formData, role: val})}>
                   <SelectTrigger className="rounded-lg border-[#D1D5DB] py-6"><SelectValue placeholder="Select role" /></SelectTrigger>
                   <SelectContent className="rounded-xl">
+                    <SelectItem value="SUPER_ADMIN">Super Admin (System-wide)</SelectItem>
                     <SelectItem value="ADMIN">Admin (Full Access)</SelectItem>
                     <SelectItem value="ENCODER">Encoder (Data Entry)</SelectItem>
                     <SelectItem value="VIEWER">Viewer (Read Only)</SelectItem>

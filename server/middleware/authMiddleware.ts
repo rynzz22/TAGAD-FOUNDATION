@@ -92,20 +92,21 @@ export const requireRole = (...allowedRoles: Role[]) => {
       return sendError(res, new UnauthorizedError('Authentication required'));
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
-      return sendError(
-        res,
-        new ForbiddenError(`Access denied: Requires one of [${allowedRoles.join(', ')}] role(s)`)
-      );
+    // SUPER_ADMIN has system-wide administrative authorization across all protected routes
+    if (req.user.role === Role.SUPER_ADMIN || allowedRoles.includes(req.user.role)) {
+      return next();
     }
 
-    next();
+    return sendError(
+      res,
+      new ForbiddenError(`Access denied: Requires one of [${allowedRoles.join(', ')}] role(s)`)
+    );
   };
 };
 
 /**
  * Enforces office boundary isolation:
- * - ADMIN: Unrestricted cross-office access.
+ * - SUPER_ADMIN & ADMIN: Unrestricted cross-office access and system-wide authority.
  * - ENCODER: Strictly restricted to their assigned officeId.
  * - VIEWER: Read-only access across approved data; mutations forbidden.
  */
@@ -117,9 +118,9 @@ export const requireOfficeScope = () => {
 
     const { role, officeId } = req.user;
 
-    // ADMIN has cross-office authority
-    if (role === Role.ADMIN) {
-      req.officeScope = null; // null represents all offices
+    // SUPER_ADMIN and ADMIN have cross-office authority
+    if (role === Role.SUPER_ADMIN || role === Role.ADMIN) {
+      req.officeScope = null; // null represents all offices / unrestricted
       return next();
     }
 

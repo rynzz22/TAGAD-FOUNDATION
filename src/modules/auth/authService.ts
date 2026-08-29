@@ -29,7 +29,9 @@ export const authService = {
 
       // Map roles for application RBAC
       const roles: AppRole[] = [];
-      if (apiUser.role === 'ADMIN') {
+      if (apiUser.role === 'SUPER_ADMIN') {
+        roles.push('SUPER_ADMIN', 'super_admin', 'ADMIN', 'admin', 'municipal_admin');
+      } else if (apiUser.role === 'ADMIN') {
         roles.push('ADMIN', 'admin', 'municipal_admin', 'super_admin');
       } else if (apiUser.role === 'ENCODER') {
         roles.push('ENCODER', 'editor');
@@ -145,7 +147,9 @@ export const authService = {
       const apiUser = resData;
 
       const roles: AppRole[] = [];
-      if (apiUser.role === 'ADMIN') {
+      if (apiUser.role === 'SUPER_ADMIN') {
+        roles.push('SUPER_ADMIN', 'super_admin', 'ADMIN', 'admin', 'municipal_admin');
+      } else if (apiUser.role === 'ADMIN') {
         roles.push('ADMIN', 'admin', 'municipal_admin', 'super_admin');
       } else if (apiUser.role === 'ENCODER') {
         roles.push('ENCODER', 'editor');

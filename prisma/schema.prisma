@@ -14,6 +14,7 @@ datasource db {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   ENCODER
   VIEWER
@@ -80,6 +81,7 @@ model Barangay {
   households    Household[]
   beneficiaries Beneficiary[]
   users         User[]
+  statisticalObservations StatisticalObservation[]
 
   @@map("tagad_barangays")
 }
@@ -126,6 +128,8 @@ model User {
   createdAccomplishments GADAccomplishment[] @relation("AccomplishmentCreatedBy")
   uploadedMOVs        MOVAttachment[]     @relation("MOVUploadedBy")
   auditLogs           AuditLog[]
+  importedDatasets    StatisticalDataset[] @relation("DatasetImportedBy")
+  provenanceRecords   StatisticalProvenance[] @relation("ProvenanceImportedBy")
 
   @@map("tagad_users")
 }
@@ -312,4 +316,175 @@ model AuditLog {
   @@index([userId, action])
   @@index([createdAt(sort: Desc)])
   @@map("tagad_audit_logs")
+}
+
+// ------------------------------------------------------------------------------
+// STATISTICAL DOMAIN & 69-TABLE METADATA CATALOG (SPRINT 7 FOUNDATION)
+// ------------------------------------------------------------------------------
+
+enum StatisticalTableClassification {
+  AGGREGATED_STATISTICS
+  INDICATOR
+  DERIVED_METRIC
+  REFERENCE_DATA
+  UNVERIFIED
+
+  @@map("canonical_stat_classification")
+}
+
+enum StatisticalPublicationStatus {
+  DRAFT
+  VALIDATED
+  OFFICIAL
+  PUBLISHED
+  WITHDRAWN
+
+  @@map("canonical_stat_pub_status")
+}
+
+enum StatisticalVerificationStatus {
+  UNVERIFIED
+  PROVISIONAL
+  VERIFIED
+
+  @@map("canonical_stat_verif_status")
+}
+
+model StatisticalTableDefinition {
+  id                 String                         @id @default(uuid()) @db.Uuid
+  tableNumber        Int                            @unique @map("table_number")
+  tableCode          String                         @unique @map("table_code") @db.VarChar(50)
+  title              String                         @db.VarChar(500)
+  domain             String                         @db.VarChar(100)
+  classification     StatisticalTableClassification @default(UNVERIFIED)
+  description        String?                        @db.Text
+  expectedUnit       String?                        @map("expected_unit") @db.VarChar(100)
+  rowGrain           String?                        @default("UNVERIFIED") @map("row_grain") @db.VarChar(255)
+  dimensionsSummary  String?                        @default("UNVERIFIED") @map("dimensions_summary") @db.VarChar(255)
+  measureStructure   String?                        @default("UNVERIFIED") @map("measure_structure") @db.VarChar(255)
+  sourceFormat       String?                        @default("UNVERIFIED") @map("source_format") @db.VarChar(100)
+  verificationStatus StatisticalVerificationStatus  @default(UNVERIFIED) @map("verification_status")
+  createdAt          DateTime                       @default(now()) @map("created_at")
+  updatedAt          DateTime                       @updatedAt @map("updated_at")
+
+  indicators   StatisticalIndicator[]
+  observations StatisticalObservation[]
+
+  @@index([domain])
+  @@index([classification])
+  @@map("tagad_statistical_table_definitions")
+}
+
+model StatisticalDataset {
+  id                 String                        @id @default(uuid()) @db.Uuid
+  datasetCode        String                        @unique @map("dataset_code") @db.VarChar(100)
+  name               String                        @db.VarChar(255)
+  description        String?                       @db.Text
+  sourceAgency       String?                       @map("source_agency") @db.VarChar(100)
+  reportingYear      Int?                          @map("reporting_year")
+  reportingPeriod    String?                       @map("reporting_period") @db.VarChar(100)
+  surveyRound        String?                       @map("survey_round") @db.VarChar(100)
+  geographicLevel    String?                       @default("MUNICIPALITY") @map("geographic_level") @db.VarChar(50)
+  sourceFileName     String?                       @map("source_file_name") @db.VarChar(255)
+  ingestionBatchId   String?                       @map("ingestion_batch_id") @db.Uuid
+  importedById       String?                       @map("imported_by_id") @db.Uuid
+  isOfficial         Boolean                       @default(false) @map("is_official")
+  isPublished        Boolean                       @default(false) @map("is_published")
+  publicationStatus  StatisticalPublicationStatus  @default(DRAFT) @map("publication_status")
+  verificationStatus StatisticalVerificationStatus @default(UNVERIFIED) @map("verification_status")
+  createdAt          DateTime                      @default(now()) @map("created_at")
+  updatedAt          DateTime                      @updatedAt @map("updated_at")
+
+  importedBy   User?                    @relation("DatasetImportedBy", fields: [importedById], references: [id], onDelete: SetNull)
+  observations StatisticalObservation[]
+
+  @@index([reportingYear, sourceAgency])
+  @@index([publicationStatus])
+  @@map("tagad_statistical_datasets")
+}
+
+model StatisticalIndicator {
+  id                    String                         @id @default(uuid()) @db.Uuid
+  indicatorCode         String                         @unique @map("indicator_code") @db.VarChar(100)
+  name                  String                         @db.VarChar(255)
+  title                 String                         @db.VarChar(500)
+  description           String?                        @db.Text
+  unit                  String?                        @db.VarChar(100)
+  classification        StatisticalTableClassification @default(INDICATOR)
+  formula               String?                        @db.Text
+  numeratorDefinition   String?                        @map("numerator_definition") @db.Text
+  denominatorDefinition String?                        @map("denominator_definition") @db.Text
+  tableDefinitionId     String?                        @map("table_definition_id") @db.Uuid
+  verificationStatus    StatisticalVerificationStatus  @default(UNVERIFIED) @map("verification_status")
+  createdAt             DateTime                       @default(now()) @map("created_at")
+  updatedAt             DateTime                       @updatedAt @map("updated_at")
+
+  tableDefinition StatisticalTableDefinition? @relation(fields: [tableDefinitionId], references: [id], onDelete: SetNull)
+  observations    StatisticalObservation[]
+
+  @@index([tableDefinitionId])
+  @@map("tagad_statistical_indicators")
+}
+
+model StatisticalDimension {
+  id                 String                        @id @default(uuid()) @db.Uuid
+  dimensionCode      String                        @unique @map("dimension_code") @db.VarChar(100)
+  name               String                        @db.VarChar(255)
+  description        String?                       @db.Text
+  dataType           String                        @default("string") @map("data_type") @db.VarChar(50)
+  vocabularySource   String?                       @map("vocabulary_source") @db.VarChar(255)
+  verificationStatus StatisticalVerificationStatus @default(UNVERIFIED) @map("verification_status")
+  createdAt          DateTime                      @default(now()) @map("created_at")
+  updatedAt          DateTime                      @updatedAt @map("updated_at")
+
+  @@map("tagad_statistical_dimensions")
+}
+
+model StatisticalProvenance {
+  id               String   @id @default(uuid()) @db.Uuid
+  sourceAgency     String?  @map("source_agency") @db.VarChar(100)
+  sourceFileName   String?  @map("source_file_name") @db.VarChar(255)
+  sourceDocument   String?  @map("source_document") @db.VarChar(255)
+  datasetCode      String?  @map("dataset_code") @db.VarChar(100)
+  tableCode        String?  @map("table_code") @db.VarChar(50)
+  reportingPeriod  String?  @map("reporting_period") @db.VarChar(100)
+  importedById     String?  @map("imported_by_id") @db.Uuid
+  ingestionBatchId String?  @map("ingestion_batch_id") @db.Uuid
+  methodologyNotes String?  @map("methodology_notes") @db.Text
+  sourceUrl        String?  @map("source_url") @db.VarChar(500)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  importedBy   User?                    @relation("ProvenanceImportedBy", fields: [importedById], references: [id], onDelete: SetNull)
+  observations StatisticalObservation[]
+
+  @@map("tagad_statistical_provenance")
+}
+
+model StatisticalObservation {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  datasetId          String                  @map("dataset_id") @db.Uuid
+  tableDefinitionId  String                  @map("table_definition_id") @db.Uuid
+  indicatorId        String?                 @map("indicator_id") @db.Uuid
+  barangayId         String?                 @map("barangay_id") @db.Uuid
+  period             String                  @db.VarChar(50)
+  numericValue       Decimal                 @map("numeric_value") @db.Decimal(18, 4)
+  unit               String?                 @db.VarChar(100)
+  dimensions         Json?
+  dimensionsHash     String?                 @map("dimensions_hash") @db.VarChar(64)
+  provenanceId       String?                 @map("provenance_id") @db.Uuid
+  suppressionStatus  String?                 @default("NONE") @map("suppression_status") @db.VarChar(50)
+  suppressionReason  String?                 @map("suppression_reason") @db.VarChar(255)
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
+
+  dataset         StatisticalDataset         @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  tableDefinition StatisticalTableDefinition @relation(fields: [tableDefinitionId], references: [id], onDelete: Restrict)
+  indicator       StatisticalIndicator?      @relation(fields: [indicatorId], references: [id], onDelete: SetNull)
+  barangay        Barangay?                  @relation(fields: [barangayId], references: [id], onDelete: SetNull)
+  provenance      StatisticalProvenance?     @relation(fields: [provenanceId], references: [id], onDelete: SetNull)
+
+  @@index([datasetId, tableDefinitionId])
+  @@index([barangayId, period])
+  @@index([indicatorId])
+  @@map("tagad_statistical_observations")
 }

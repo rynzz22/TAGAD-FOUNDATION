@@ -61,7 +61,7 @@ async function main() {
     });
   }
 
-  // 3. Seed System Administrator
+  // 3. Seed System Administrator & Super Administrator
   const mpdcOffice = await prisma.office.findUnique({ where: { code: 'MPDC' } });
   const adminEmail = 'admin@talibon.gov.ph';
   const hashedPassword = await bcrypt.hash('Admin@1234', 10);
@@ -84,7 +84,33 @@ async function main() {
     },
   });
 
+  // 4. Seed Dedicated Super Administrator (System-wide / No office restriction)
+  const superAdminEmail = 'superadmin@talibon.gov.ph';
+  const superAdminPasswordPlain = process.env.SUPER_ADMIN_PASSWORD || 'Admin@1234';
+  const hashedSuperAdminPassword = await bcrypt.hash(superAdminPasswordPlain, 10);
+
+  const superAdmin = await prisma.user.upsert({
+    where: { email: superAdminEmail },
+    update: {
+      fullName: 'TAGAD Super Administrator',
+      role: Role.SUPER_ADMIN,
+      officeId: null,
+      barangayId: null,
+      isActive: true,
+    },
+    create: {
+      email: superAdminEmail,
+      fullName: 'TAGAD Super Administrator',
+      passwordHash: hashedSuperAdminPassword,
+      role: Role.SUPER_ADMIN,
+      officeId: null,
+      barangayId: null,
+      isActive: true,
+    },
+  });
+
   console.log('Seeded admin user:', admin.email);
+  console.log('Seeded super admin user:', superAdmin.email);
   console.log('Canonical seed completed successfully.');
 }
 

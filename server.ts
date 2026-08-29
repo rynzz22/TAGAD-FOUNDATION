@@ -3,6 +3,7 @@ import express, { Request, Response, NextFunction } from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import cors from 'cors';
+import { validateJwtConfig } from './server/lib/jwt';
 
 // Route imports
 import authRoutes from './server/routes/auth';
@@ -17,9 +18,20 @@ import gadPlanRoutes from './server/routes/gadPlans';
 import accomplishmentRoutes from './server/routes/accomplishments';
 import dashboardRoutes from './server/routes/dashboard';
 import reportRoutes from './server/routes/reports';
+import statisticalCatalogRoutes from './server/routes/statisticalCatalog';
 import { sendError } from './server/lib/response';
 
 async function startServer() {
+  // Validate critical security & JWT configuration
+  try {
+    validateJwtConfig();
+  } catch (err: any) {
+    console.error('FATAL: Startup configuration error:', err.message);
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
+  }
+
   const app = express();
   const PORT = 3000;
 
@@ -49,6 +61,7 @@ async function startServer() {
   app.use('/api/accomplishments', accomplishmentRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/reports', reportRoutes);
+  app.use('/api/statistical-catalog', statisticalCatalogRoutes);
 
   // Centralized Error Handling Middleware
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {

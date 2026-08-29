@@ -11,8 +11,8 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
-// Canonical 3-Role Architecture
-export type CanonicalRole = 'ADMIN' | 'ENCODER' | 'VIEWER';
+// Canonical 4-Role Architecture
+export type CanonicalRole = 'SUPER_ADMIN' | 'ADMIN' | 'ENCODER' | 'VIEWER';
 
 // Legacy Role Aliases for Backward Compatibility
 export type AppRole =

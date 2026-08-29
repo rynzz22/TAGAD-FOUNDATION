@@ -5,7 +5,7 @@ import { AuditService } from './AuditService';
 import { Request } from 'express';
 import { getFallbackDemographicsData } from '../lib/fallbackStore';
 
-const MEMORY_BENEFICIARIES: any[] = [];
+export const MEMORY_BENEFICIARIES: any[] = [];
 
 export class BeneficiaryService {
   public static async getBeneficiaries(

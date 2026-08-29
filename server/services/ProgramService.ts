@@ -5,7 +5,7 @@ import { AuditService } from './AuditService';
 import { Request } from 'express';
 import { FALLBACK_PROGRAMS } from '../lib/fallbackStore';
 
-const MEMORY_PROGRAMS: any[] = [...FALLBACK_PROGRAMS];
+export const MEMORY_PROGRAMS: any[] = [...FALLBACK_PROGRAMS];
 
 export class ProgramService {
   public static async getPrograms(
@@ -23,7 +23,12 @@ export class ProgramService {
       let filtered = [...MEMORY_PROGRAMS];
       if (params.year) filtered = filtered.filter((p) => p.fiscalYear === Number(params.year));
       if (params.officeId) filtered = filtered.filter((p) => p.officeId === params.officeId);
+      if (params.sector) filtered = filtered.filter((p) => p.sector === params.sector);
       if (params.status) filtered = filtered.filter((p) => p.status === params.status);
+      if (params.search) {
+        const s = params.search.toLowerCase();
+        filtered = filtered.filter((p) => (p.title && p.title.toLowerCase().includes(s)) || (p.description && p.description.toLowerCase().includes(s)));
+      }
       if (actorUser && actorUser.role === Role.ENCODER && actorUser.officeId) {
         filtered = filtered.filter((p) => p.officeId === actorUser.officeId);
       }

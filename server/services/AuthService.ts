@@ -13,6 +13,18 @@ import { Request } from 'express';
 
 export const DEMO_USERS: any[] = [
   {
+    id: 'usr-superadmin-01',
+    email: 'superadmin@talibon.gov.ph',
+    fullName: 'TAGAD Super Administrator',
+    role: 'SUPER_ADMIN',
+    officeId: null,
+    office: null,
+    barangayId: null,
+    barangay: null,
+    isActive: true,
+    createdAt: new Date(),
+  },
+  {
     id: 'usr-admin-01',
     email: 'admin@talibon.gov.ph',
     fullName: 'System Administrator',
@@ -147,35 +159,49 @@ export class AuthService {
 
     // Fallback demo authentication
     const demoUser = DEMO_USERS.find((u) => u.email === cleanEmail);
-    if (demoUser && (passwordPlain === 'Admin@1234' || passwordPlain === 'Password123!' || passwordPlain === 'password' || passwordPlain === 'demo1234')) {
-      const tokenPayload = {
-        id: demoUser.id,
-        email: demoUser.email,
-        role: demoUser.role,
-        officeId: demoUser.officeId,
-        barangayId: demoUser.barangayId,
-      };
+    if (demoUser) {
+      let isDemoPasswordValid = false;
+      if (demoUser.role === 'SUPER_ADMIN') {
+        const configuredSuperAdminPassword = process.env.SUPER_ADMIN_PASSWORD;
+        if (configuredSuperAdminPassword) {
+          isDemoPasswordValid = passwordPlain === configuredSuperAdminPassword;
+        } else {
+          isDemoPasswordValid = (passwordPlain === 'Admin@1234' || passwordPlain === 'Password123!' || passwordPlain === 'password' || passwordPlain === 'demo1234');
+        }
+      } else {
+        isDemoPasswordValid = (passwordPlain === 'Admin@1234' || passwordPlain === 'Password123!' || passwordPlain === 'password' || passwordPlain === 'demo1234');
+      }
 
-      const accessToken = signAccessToken(tokenPayload);
-      const refreshToken = signRefreshToken(tokenPayload);
-
-      return {
-        token: accessToken,
-        accessToken,
-        refreshToken,
-        user: {
+      if (isDemoPasswordValid) {
+        const tokenPayload = {
           id: demoUser.id,
           email: demoUser.email,
-          name: demoUser.fullName,
-          fullName: demoUser.fullName,
           role: demoUser.role,
           officeId: demoUser.officeId,
-          office: demoUser.office?.code || demoUser.office?.name || '',
-          officeDetails: demoUser.office,
           barangayId: demoUser.barangayId,
-          barangayDetails: demoUser.barangay,
-        },
-      };
+        };
+
+        const accessToken = signAccessToken(tokenPayload);
+        const refreshToken = signRefreshToken(tokenPayload);
+
+        return {
+          token: accessToken,
+          accessToken,
+          refreshToken,
+          user: {
+            id: demoUser.id,
+            email: demoUser.email,
+            name: demoUser.fullName,
+            fullName: demoUser.fullName,
+            role: demoUser.role,
+            officeId: demoUser.officeId,
+            office: demoUser.office?.code || demoUser.office?.name || '',
+            officeDetails: demoUser.office,
+            barangayId: demoUser.barangayId,
+            barangayDetails: demoUser.barangay,
+          },
+        };
+      }
     }
 
     throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');

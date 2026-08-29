@@ -146,6 +146,10 @@ const FIELD_ALIASES: Record<string, { target: string; model: 'Beneficiary' | 'Ho
 
   // Household / 4Ps
   household_no: { target: 'householdNo', model: 'Household', type: 'string', required: false },
+  household_number: { target: 'householdNo', model: 'Household', type: 'string', required: false },
+  householdnumber: { target: 'householdNo', model: 'Household', type: 'string', required: false },
+  household_id: { target: 'householdNo', model: 'Household', type: 'string', required: false },
+  hh_no: { target: 'householdNo', model: 'Household', type: 'string', required: false },
   hh_id: { target: 'householdNo', model: 'Household', type: 'string', required: false },
   is_4ps: { target: 'is4Ps', model: 'Household', type: 'boolean', required: false },
   four_ps: { target: 'is4Ps', model: 'Household', type: 'boolean', required: false },
@@ -256,7 +260,7 @@ export class CsvDiscoveryService {
           transformationRule = 'Parse ISO 8601 YYYY-MM-DD or MM/DD/YYYY to Date';
           validationRule = 'Valid historical date (past date)';
         } else if (inferredTargetField === 'barangayCode') {
-          transformationRule = 'Match name or code to Talibon 33 canonical Barangay records';
+          transformationRule = 'Match name or code to Talibon 25 canonical Barangay records';
           validationRule = 'Must match valid Talibon Barangay code (e.g. TLB-POB) or name (e.g. Poblacion)';
         } else if (inferredTargetField === 'sector') {
           transformationRule = 'Map to standard GAD Sector classification';
@@ -272,7 +276,7 @@ export class CsvDiscoveryService {
         targetFieldConfidence = 0.85;
         required = true;
         dataType = 'string(Barangay)';
-        transformationRule = 'Match column values to Talibon 33 canonical Barangay records';
+        transformationRule = 'Match column values to Talibon 25 canonical Barangay records';
         validationRule = 'Must match valid Talibon Barangay code or name';
         notes = 'Inferred from matching Barangay values';
       } else if (isLikelySex) {

@@ -38,7 +38,7 @@ export const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6, { message: 'Password must be at least 6 characters' }),
   fullName: z.string().min(2, { message: 'Full name is required' }),
-  role: z.enum(['ADMIN', 'ENCODER', 'VIEWER']).default('ENCODER'),
+  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'ENCODER', 'VIEWER']).default('ENCODER'),
   officeId: z.string().optional().nullable(),
   barangayId: z.string().optional().nullable(),
 });
@@ -46,7 +46,7 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z.object({
   email: z.string().email().optional(),
   fullName: z.string().min(2).optional(),
-  role: z.enum(['ADMIN', 'ENCODER', 'VIEWER']).optional(),
+  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'ENCODER', 'VIEWER']).optional(),
   officeId: z.string().optional().nullable(),
   barangayId: z.string().optional().nullable(),
   isActive: z.boolean().optional(),
