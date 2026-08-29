@@ -1,47 +1,53 @@
 import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Menu, X, BarChart3, Users, Briefcase, Award, FileText, MessageSquare, ShieldCheck } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 
 export const PublicLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
 
   const navLinks = [
-    { label: 'Overview', to: '/', icon: BarChart3 },
-    { label: 'Demographics', to: '/demographics', icon: Users },
-    { label: 'Programs', to: '/public-programs', icon: Briefcase },
-    { label: 'Accomplishments', to: '/public-accomplishments', icon: Award },
-    { label: 'Approved Plans', to: '/public-plans', icon: FileText },
-    { label: 'Feedback', to: '/feedback', icon: MessageSquare },
+    { label: 'Overview', to: '/' },
+    { label: 'Demographics', to: '/demographics' },
+    { label: 'Programs', to: '/public-programs' },
+    { label: 'Accomplishments', to: '/public-accomplishments' },
+    { label: 'Approved Plans', to: '/public-plans' },
+    { label: 'Feedback', to: '/feedback' },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Top Bar strictly adhering to Top Bar Contract */}
-      <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm sticky top-0 z-40 px-4 sm:px-6">
-        <div className="h-full max-w-7xl mx-auto flex items-center justify-between gap-4">
-          {/* Zone 1: Brand Title (single text line/anchor) */}
-          <Link to="/" className="flex items-center gap-2.5 shrink-0" onClick={() => setMobileMenuOpen(false)}>
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-xs tracking-wider shadow-sm">
-              TG
+    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-slate-800 selection:text-white">
+      {/* Institutional Top Bar */}
+      <header className="border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm sticky top-0 z-40 px-4 sm:px-8">
+        <div className="max-w-6xl mx-auto h-16 flex items-center justify-between gap-6">
+          {/* Brand Identity */}
+          <Link
+            to="/"
+            className="flex items-center gap-3 shrink-0"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <div className="text-left">
+              <span className="font-semibold text-slate-900 dark:text-white tracking-tight text-base block leading-none">
+                TAGAD
+              </span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1 leading-none">
+                Municipality of Talibon
+              </span>
             </div>
-            <span className="font-bold text-slate-900 dark:text-white tracking-tight text-lg leading-none whitespace-nowrap">
-              TAGAD Talibon
-            </span>
           </Link>
 
-          {/* Zone 2: Nav Links (single-line, desktop) */}
-          <nav className="hidden lg:flex items-center gap-1">
+          {/* Desktop Navigation Links */}
+          <nav className="hidden lg:flex items-center gap-6">
             {navLinks.map((link) => {
               const isActive = location.pathname === link.to;
               return (
                 <NavLink
                   key={link.to}
                   to={link.to}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  className={`text-xs font-medium transition-colors whitespace-nowrap py-1 ${
                     isActive
-                      ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300 font-bold'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                      ? 'text-slate-950 dark:text-white font-semibold border-b-2 border-slate-900 dark:border-white'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   {link.label}
@@ -50,22 +56,21 @@ export const PublicLayout: React.FC = () => {
             })}
           </nav>
 
-          {/* Zone 3: Primary Action & Mobile Toggle */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* Action / Official Login */}
+          <div className="flex items-center gap-3 shrink-0">
             <Link
               to="/login"
-              className="py-2 px-4 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-lg shadow-sm transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5"
+              className="py-1.5 px-3.5 text-xs font-medium text-slate-800 dark:text-slate-200 hover:text-slate-950 dark:hover:text-white border border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600 rounded transition-colors whitespace-nowrap"
             >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Official Sign In</span>
+              Personnel Portal
             </Link>
 
-            {/* Mobile menu trigger */}
+            {/* Mobile Menu Button */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              aria-label="Toggle navigation menu"
+              className="lg:hidden p-1.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 transition-colors"
+              aria-label="Toggle menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -74,28 +79,24 @@ export const PublicLayout: React.FC = () => {
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 shadow-lg animate-in slide-in-from-top-2 duration-200">
-            <div className="flex flex-col gap-1">
-              {navLinks.map((link) => {
-                const Icon = link.icon;
-                const isActive = location.pathname === link.to;
-                return (
-                  <NavLink
-                    key={link.to}
-                    to={link.to}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                      isActive
-                        ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300'
-                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 text-slate-400" />
-                    <span>{link.label}</span>
-                  </NavLink>
-                );
-              })}
-            </div>
+          <div className="lg:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 space-y-1">
+            {navLinks.map((link) => {
+              const isActive = location.pathname === link.to;
+              return (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`block px-3 py-2 text-xs font-medium rounded transition-colors ${
+                    isActive
+                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  {link.label}
+                </NavLink>
+              );
+            })}
           </div>
         )}
       </header>
@@ -105,51 +106,42 @@ export const PublicLayout: React.FC = () => {
         <Outlet />
       </main>
 
-      {/* Municipal Citizen Transparency Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-10 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-900 dark:text-white text-sm">
-                  Municipality of Talibon, Bohol
-                </span>
-                <span className="text-slate-300 dark:text-slate-700">•</span>
-                <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-                  GFPS Transparency Portal
-                </span>
+      {/* Institutional Footer */}
+      <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-12 px-4 sm:px-8 mt-16">
+        <div className="max-w-6xl mx-auto space-y-8">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-slate-100 dark:border-slate-800">
+            <div className="space-y-1.5 max-w-2xl">
+              <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                Municipality of Talibon, Bohol
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
-                Dedicated to statutory compliance under RA 9710 (Magna Carta of Women) and PCW-DILG-DBM-NEDA Joint Memorandum Circulars. Zero personally identifiable information (PII) is published on this public portal.
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Talibon Analytics for Gender and Development (TAGAD) is the public monitoring portal of the municipal Gender and Development Focal Point System, established in compliance with Republic Act No. 9710.
               </p>
             </div>
 
-            <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-              <span className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 font-medium">
-                25 Barangays Active
-              </span>
-              <span className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 font-medium">
-                FY 2026 Live
-              </span>
+            <div className="text-xs text-slate-500 dark:text-slate-400 space-y-0.5 md:text-right shrink-0">
+              <div className="font-medium text-slate-700 dark:text-slate-300">Talibon Municipal Hall</div>
+              <div>Poblacion, Talibon, Bohol 6325</div>
+              <div>gad.talibon@gmail.com</div>
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
             <div>
-              <span>TAGAD System v2.0 • Talibon Analytics for Gender and Development</span>
+              © {new Date().getFullYear()} Municipal Government of Talibon. All rights reserved.
             </div>
-            <div className="flex items-center gap-4">
-              <Link to="/demographics" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+            <div className="flex items-center gap-6">
+              <Link to="/demographics" className="hover:text-slate-900 dark:hover:text-white transition-colors">
                 Demographics
               </Link>
-              <Link to="/public-programs" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+              <Link to="/public-programs" className="hover:text-slate-900 dark:hover:text-white transition-colors">
                 Programs
               </Link>
-              <Link to="/feedback" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                Submit Feedback
+              <Link to="/public-accomplishments" className="hover:text-slate-900 dark:hover:text-white transition-colors">
+                Accomplishments
               </Link>
-              <Link to="/login" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-medium text-slate-700 dark:text-slate-300">
-                Official Access
+              <Link to="/feedback" className="hover:text-slate-900 dark:hover:text-white transition-colors">
+                Feedback
               </Link>
             </div>
           </div>
@@ -158,3 +150,4 @@ export const PublicLayout: React.FC = () => {
     </div>
   );
 };
+
