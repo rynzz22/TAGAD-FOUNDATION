@@ -1,7 +1,5 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from "express";
-import { createServer as createViteServer } from "vite";
-import path from "path";
 import cors from 'cors';
 import { validateJwtConfig } from './server/lib/jwt';
 
@@ -21,7 +19,7 @@ import reportRoutes from './server/routes/reports';
 import statisticalCatalogRoutes from './server/routes/statisticalCatalog';
 import { sendError } from './server/lib/response';
 
-async function startServer() {
+function startServer() {
   // Validate critical security & JWT configuration
   try {
     validateJwtConfig();
@@ -68,21 +66,6 @@ async function startServer() {
     console.error('Unhandled server error:', err);
     sendError(res, err, err.statusCode || 500);
   });
-
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`TAGAD Backend Engine running on http://localhost:${PORT}`);
