@@ -18,14 +18,21 @@ export const TopBar: React.FC = () => {
   return (
     <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-30 px-6">
       <div className="h-full max-w-7xl mx-auto flex items-center justify-between gap-6">
-        {/* Zone 1: Brand Title (Strictly one line text element) */}
-        <Link to="/dashboard" className="flex items-center gap-2 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-xs tracking-wider">
-            TG
+        {/* Zone 1: Brand Title */}
+        <Link to="/dashboard" className="flex items-center gap-3 shrink-0">
+          <img
+            src="/talibon-seal.png"
+            alt="Municipality of Talibon Official Seal"
+            className="w-9 h-9 object-contain shrink-0"
+          />
+          <div className="text-left">
+            <span className="font-bold text-slate-900 dark:text-white tracking-tight text-base block leading-none">
+              TAGAD
+            </span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 leading-none">
+              Municipality of Talibon
+            </span>
           </div>
-          <span className="font-bold text-slate-900 dark:text-white tracking-tight text-lg leading-none">
-            TAGAD
-          </span>
         </Link>
 
         {/* Zone 2: Nav Links (4-6 links, single-line) */}
