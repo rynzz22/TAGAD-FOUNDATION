@@ -1,0 +1,5 @@
+DO $$
+BEGIN
+  ALTER TYPE canonical_role ADD VALUE IF NOT EXISTS 'SUPER_ADMIN';
+END $$;
+
