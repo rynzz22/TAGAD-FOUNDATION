@@ -26,11 +26,6 @@ export const PublicLayout: React.FC = () => {
             className="flex items-center gap-3 shrink-0"
             onClick={() => setMobileMenuOpen(false)}
           >
-            <img
-              src="TAGAD-FOUNDATION\resources\images\Talibon-Official-Seal-v4-2003-to-2023-.png"
-              alt="Municipality of Talibon Official Seal"
-              className="w-9 h-9 object-contain shrink-0"
-            />
             <div className="text-left">
               <span className="font-semibold text-slate-900 dark:text-white tracking-tight text-base block leading-none">
                 TAGAD

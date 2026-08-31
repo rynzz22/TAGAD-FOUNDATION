@@ -12,9 +12,9 @@ export const Logo: React.FC<LogoProps> = ({
   className = '',
 }) => {
   const iconSizes = {
-    sm: 'w-7 h-7',
-    md: 'w-9 h-9',
-    lg: 'w-12 h-12',
+    sm: 'w-7 h-7 text-xs',
+    md: 'w-9 h-9 text-sm',
+    lg: 'w-12 h-12 text-base',
   };
 
   const titleSizes = {
@@ -25,11 +25,9 @@ export const Logo: React.FC<LogoProps> = ({
 
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>
-      <img
-        src="/talibon-seal.png"
-        alt="Municipality of Talibon Official Seal"
-        className={`${iconSizes[size]} object-contain shrink-0`}
-      />
+      <div className={`${iconSizes[size]} rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-sm shrink-0 tracking-wider`}>
+        TG
+      </div>
       <div className="flex flex-col">
         <span className={`${titleSizes[size]} text-slate-900 dark:text-white tracking-tight leading-none`}>
           TAGAD

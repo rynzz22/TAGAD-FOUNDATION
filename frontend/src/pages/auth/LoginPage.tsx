@@ -42,25 +42,16 @@ export const LoginPage: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col justify-center py-16 px-4 sm:px-6">
       <div className="sm:mx-auto sm:w-full sm:max-w-sm space-y-8">
         {/* Header */}
-        <div className="space-y-3 text-center flex flex-col items-center">
-          <Link to="/" className="inline-flex flex-col items-center group">
-            <img
-              src="/talibon-seal.png"
-              alt="Municipality of Talibon Official Seal"
-              className="w-16 h-16 object-contain mb-2"
-            />
-            <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-              TAGAD
-            </span>
+        <div className="space-y-2 text-center">
+          <Link to="/" className="inline-block text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
+            TAGAD
           </Link>
-          <div className="space-y-1">
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight">
-              Personnel Sign In
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Municipality of Talibon • Gender and Development Portal
-            </p>
-          </div>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight">
+            Personnel Sign In
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Municipality of Talibon • Gender and Development Portal
+          </p>
         </div>
 
         {/* Form Container */}
