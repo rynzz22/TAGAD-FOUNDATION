@@ -12,6 +12,7 @@ import officeRoutes from './offices';
 import barangayRoutes from './barangays';
 import ingestionRoutes from './ingestion';
 import datasetRoutes from './datasets';
+import statisticalCatalogRoutes from '../statisticalCatalog';
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use('/offices', officeRoutes);
 router.use('/barangays', barangayRoutes);
 router.use('/ingestion', ingestionRoutes);
 router.use('/datasets', datasetRoutes);
+router.use('/statistical-catalog', statisticalCatalogRoutes);
 
 export default router;

@@ -1,0 +1,51 @@
+name: TAGAD Backend CI Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  backend-verification:
+    name: Backend CI (Typecheck, Governance Tests, Build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/tagad?schema=public"
+      DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/tagad?schema=public"
+      JWT_SECRET: "tagad_github_actions_ci_jwt_secret_signing_key_2026_super_secure"
+      JWT_REFRESH_SECRET: "tagad_github_actions_ci_jwt_refresh_secret_signing_key_2026_super_secure"
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:5173"
+      RATE_LIMIT_LOGIN_MAX: "100"
+      RATE_LIMIT_FEEDBACK_MAX: "100"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Node Dependencies
+        run: npm ci || npm install
+
+      - name: Validate Prisma Database Schema
+        run: npx prisma validate
+
+      - name: Generate Prisma Client Engine
+        run: npx prisma generate
+
+      - name: Typecheck Backend Codebase
+        run: npm run typecheck
+
+      - name: Execute Node Backend Test Suite
+        run: npm test
+
+      - name: Compile Backend Production Bundle
+        run: npm run build

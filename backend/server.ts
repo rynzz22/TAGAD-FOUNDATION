@@ -1,7 +1,13 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from "express";
 import cors from 'cors';
+import helmet from 'helmet';
 import { validateJwtConfig } from './server/lib/jwt';
+import { TokenRevocationService } from './server/services/TokenRevocationService';
+import { requestLogger } from './server/middleware/requestLogger';
+import { logger } from './server/lib/logger';
+import { sendError } from './server/lib/response';
+import { configureCors } from './server/lib/cors';
 
 // Route imports
 import authRoutes from './server/routes/auth';
@@ -17,24 +23,62 @@ import accomplishmentRoutes from './server/routes/accomplishments';
 import dashboardRoutes from './server/routes/dashboard';
 import reportRoutes from './server/routes/reports';
 import statisticalCatalogRoutes from './server/routes/statisticalCatalog';
-import { sendError } from './server/lib/response';
 
-function startServer() {
+export { configureCors };
+
+async function startServer() {
   // Validate critical security & JWT configuration
   try {
     validateJwtConfig();
   } catch (err: any) {
-    console.error('FATAL: Startup configuration error:', err.message);
+    logger.error('FATAL_STARTUP_JWT_CONFIG_ERROR', err);
     if (process.env.NODE_ENV === 'production') {
       process.exit(1);
     }
   }
 
+  // Hydrate durable token revocation store
+  try {
+    await TokenRevocationService.hydrateFromDatabase();
+  } catch (err: any) {
+    logger.warn('TOKEN_REVOCATION_HYDRATION_WARNING', { error: err.message });
+  }
+
   const app = express();
   const PORT = 3000;
 
-  app.use(cors());
-  app.use(express.json());
+  // BE-1/BE-2: Trust reverse proxy (1 hop for Cloud Run / Nginx container ingress)
+  // Ensures req.ip correctly resolves client IP for rate limiting and logging without header spoofing
+  const trustProxyConfig = process.env.TRUST_PROXY ? (
+    process.env.TRUST_PROXY === 'true' ? true :
+    process.env.TRUST_PROXY === 'false' ? false :
+    !isNaN(Number(process.env.TRUST_PROXY)) ? Number(process.env.TRUST_PROXY) :
+    process.env.TRUST_PROXY
+  ) : 1;
+  app.set('trust proxy', trustProxyConfig);
+
+  // BE-2: Security Headers via Helmet
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      frameguard: false,
+      xContentTypeOptions: true,
+      xDnsPrefetchControl: true,
+      xDownloadOptions: true,
+      xPermittedCrossDomainPolicies: true,
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    })
+  );
+
+  // BE-2: Explicit CORS Allowlist (No wildcard with credentials)
+  app.use(cors(configureCors()));
+
+  // BE-6: Structured Request Tracing & Logging Middleware
+  app.use(requestLogger);
+
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // Health check
   app.get("/api/health", (req, res) => {
@@ -61,15 +105,27 @@ function startServer() {
   app.use('/api/reports', reportRoutes);
   app.use('/api/statistical-catalog', statisticalCatalogRoutes);
 
-  // Centralized Error Handling Middleware
-  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-    console.error('Unhandled server error:', err);
+  // Centralized Error Handling Middleware for API routes (BE-6)
+  app.use('/api', (err: any, req: Request, res: Response, next: NextFunction) => {
+    logger.error('API_UNHANDLED_ERROR', err, {
+      requestId: req.id,
+      method: req.method,
+      path: req.originalUrl || req.url,
+      statusCode: err.statusCode || 500,
+    });
     sendError(res, err, err.statusCode || 500);
   });
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`TAGAD Backend Engine running on http://localhost:${PORT}`);
+    logger.info('TAGAD_BACKEND_SERVER_STARTED', {
+      port: PORT,
+      url: `http://localhost:${PORT}`,
+      env: process.env.NODE_ENV || 'development',
+    });
   });
 }
 
-startServer();
+// Only start when executed directly
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
