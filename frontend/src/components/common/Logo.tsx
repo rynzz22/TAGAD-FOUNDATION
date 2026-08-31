@@ -34,7 +34,7 @@ export const Logo: React.FC<LogoProps> = ({
         </span>
         {showSubtitle && (
           <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 leading-tight mt-0.5 whitespace-nowrap">
-            Talibon GAD Analytics
+            Municipality of Talibon
           </span>
         )}
       </div>
