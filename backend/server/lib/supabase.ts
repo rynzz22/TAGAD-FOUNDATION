@@ -25,3 +25,5 @@ export const supabaseAdmin = (supabaseUrl && supabaseServiceRoleKey)
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(supabaseUrl && supabaseServiceRoleKey);
 };
+
+
