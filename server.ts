@@ -2,8 +2,6 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from "express";
 import cors from 'cors';
 import helmet from 'helmet';
-import path from 'path';
-import { createServer as createViteServer } from "vite";
 import { validateJwtConfig } from './server/lib/jwt';
 import { TokenRevocationService } from './server/services/TokenRevocationService';
 import { requestLogger } from './server/middleware/requestLogger';
@@ -118,23 +116,8 @@ async function startServer() {
     sendError(res, err, err.statusCode || 500);
   });
 
-  // Vite middleware for development / Static files in production
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
   app.listen(PORT, "0.0.0.0", () => {
-    logger.info('TAGAD_SERVER_STARTED', {
+    logger.info('TAGAD_BACKEND_SERVER_STARTED', {
       port: PORT,
       url: `http://localhost:${PORT}`,
       env: process.env.NODE_ENV || 'development',
