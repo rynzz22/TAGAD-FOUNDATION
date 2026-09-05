@@ -25,6 +25,8 @@ import DataEncoding from '../../pages/DataEncoding';
 import Reports from '../../pages/Reports';
 import UserManagement from '../../pages/UserManagement';
 import StatisticalCatalog from '../../pages/StatisticalCatalog';
+import TableBuilderPage from '../../pages/admin/TableBuilderPage';
+import StatisticalDataEntryPage from '../../pages/admin/StatisticalDataEntryPage';
 
 // Error Pages
 import { NotFoundPage } from '../../pages/error/NotFoundPage';
@@ -65,6 +67,10 @@ export const AppRouter: React.FC = () => {
             <Route path="/beneficiaries" element={<DataEncoding />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/statistical-catalog" element={<StatisticalCatalog />} />
+            <Route path="/statistical-data" element={<StatisticalDataEntryPage />} />
+            <Route path="/statistical-data/:tableId" element={<StatisticalDataEntryPage />} />
+            <Route path="/table-builder" element={<TableBuilderPage />} />
+            <Route path="/table-builder/:id" element={<TableBuilderPage />} />
             <Route
               path="/users"
               element={
@@ -84,6 +90,10 @@ export const AppRouter: React.FC = () => {
             <Route path="/admin/beneficiaries" element={<DataEncoding />} />
             <Route path="/admin/reports" element={<Reports />} />
             <Route path="/admin/statistical-catalog" element={<StatisticalCatalog />} />
+            <Route path="/admin/statistical-data" element={<StatisticalDataEntryPage />} />
+            <Route path="/admin/statistical-data/:tableId" element={<StatisticalDataEntryPage />} />
+            <Route path="/admin/table-builder" element={<TableBuilderPage />} />
+            <Route path="/admin/table-builder/:id" element={<TableBuilderPage />} />
             <Route
               path="/admin/users"
               element={

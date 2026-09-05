@@ -73,6 +73,18 @@ export const DEMO_USERS: any[] = [
     createdAt: new Date(),
   },
   {
+    id: 'usr-encoder-mpdc',
+    email: 'mpdc_encoder@talibon.gov.ph',
+    fullName: 'MPDC GAD Encoder',
+    role: 'ENCODER',
+    officeId: 'off-mpdc',
+    office: { id: 'off-mpdc', code: 'MPDC', name: 'Municipal Planning and Development Coordinator' },
+    barangayId: null,
+    barangay: null,
+    isActive: true,
+    createdAt: new Date(),
+  },
+  {
     id: 'usr-viewer-01',
     email: 'viewer@talibon.gov.ph',
     fullName: 'Municipal Auditor / Viewer',

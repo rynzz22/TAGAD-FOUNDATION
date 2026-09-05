@@ -364,12 +364,15 @@ model StatisticalTableDefinition {
   dimensionsSummary  String?                        @default("UNVERIFIED") @map("dimensions_summary") @db.VarChar(255)
   measureStructure   String?                        @default("UNVERIFIED") @map("measure_structure") @db.VarChar(255)
   sourceFormat       String?                        @default("UNVERIFIED") @map("source_format") @db.VarChar(100)
+  isSystemTable      Boolean                        @default(false) @map("is_system_table")
+  isArchived         Boolean                        @default(false) @map("is_archived")
   verificationStatus StatisticalVerificationStatus  @default(UNVERIFIED) @map("verification_status")
   createdAt          DateTime                       @default(now()) @map("created_at")
   updatedAt          DateTime                       @updatedAt @map("updated_at")
 
-  indicators   StatisticalIndicator[]
-  observations StatisticalObservation[]
+  indicators        StatisticalIndicator[]
+  observations      StatisticalObservation[]
+  dimensionBindings TableDimensionBinding[]
 
   @@index([domain])
   @@index([classification])
@@ -438,7 +441,27 @@ model StatisticalDimension {
   createdAt          DateTime                      @default(now()) @map("created_at")
   updatedAt          DateTime                      @updatedAt @map("updated_at")
 
+  tableBindings      TableDimensionBinding[]
+
   @@map("tagad_statistical_dimensions")
+}
+
+model TableDimensionBinding {
+  id                String                     @id @default(uuid()) @db.Uuid
+  tableDefinitionId String                     @map("table_definition_id") @db.Uuid
+  dimensionId       String                     @map("dimension_id") @db.Uuid
+  displayOrder      Int                        @default(0) @map("display_order")
+  isRequired        Boolean                    @default(true) @map("is_required")
+  allowedValues     Json?                      @map("allowed_values")
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
+
+  tableDefinition   StatisticalTableDefinition @relation(fields: [tableDefinitionId], references: [id], onDelete: Cascade)
+  dimension         StatisticalDimension       @relation(fields: [dimensionId], references: [id], onDelete: Restrict)
+
+  @@unique([tableDefinitionId, dimensionId])
+  @@index([tableDefinitionId, displayOrder])
+  @@map("tagad_table_dimension_bindings")
 }
 
 model StatisticalProvenance {
